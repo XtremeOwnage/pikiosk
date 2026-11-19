@@ -1,0 +1,6 @@
+[Unit]
+Description=pikiosk network watchdog
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/pikiosk/netwatch.sh

@@ -1,0 +1,49 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Tools
+        run: sudo apt-get update && sudo apt-get install -y mtools xz-utils
+      - name: Test
+        run: go test ./...
+      - name: Version
+        run: echo "VERSION=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
+      - name: Payload
+        run: |
+          mkdir -p dist work
+          deploy/raspios/payload.sh work "$VERSION"
+          tar -C work -czf dist/pikiosk-arm64.tar.gz pikiosk
+      - name: Image
+        run: |
+          curl -fsSL -o raspios.img.xz https://downloads.raspberrypi.com/raspios_lite_arm64_latest
+          xz -d raspios.img.xz
+          deploy/raspios/build-image.sh raspios.img "" UTC
+          xz -T0 -6 -c raspios.img > "dist/pikiosk-${VERSION}-raspios-arm64.img.xz"
+      - name: Checksums
+        run: |
+          cd dist
+          for f in *; do sha256sum "$f" > "$f.sha256"; done
+      - uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: dist/*
+          generate_release_notes: true
+      - uses: actions/upload-artifact@v4
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        with:
+          name: pikiosk
+          path: dist/

@@ -1,0 +1,19 @@
+[Unit]
+Description=DLNA media renderer for pikiosk
+Wants=network-online.target
+After=network-online.target pikiosk.service
+StartLimitIntervalSec=0
+
+[Service]
+User=@KIOSK_USER@
+EnvironmentFile=/etc/default/pikiosk
+Environment=XDG_CACHE_HOME=/var/cache/pikiosk-dlna
+ExecStart=/usr/local/lib/pikiosk/dlna.sh
+CacheDirectory=pikiosk-dlna
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

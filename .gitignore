@@ -1,0 +1,7 @@
+result
+result-*
+/state/
+/kioskd
+/dist/
+/docs-site/site/
+/docs-site/.cache/

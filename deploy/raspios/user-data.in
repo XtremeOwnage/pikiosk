@@ -1,0 +1,31 @@
+#cloud-config
+# First-boot setup for a pikiosk built on Raspberry Pi OS.
+hostname: pikiosk
+manage_etc_hosts: true
+timezone: @TIMEZONE@
+
+# SSH accepts keys only. Keys come from authorized_keys on the boot
+# partition (see firstboot.sh); without one, nobody can log in over SSH.
+users:
+  - name: admin
+    gecos: pikiosk admin
+    groups: [adm, sudo, video, audio, systemd-journal]
+    shell: /bin/bash
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+    lock_passwd: true
+
+ssh_pwauth: false
+enable_ssh: true
+
+# SSH is up before the pikiosk install, so the Pi stays reachable even if
+# the install fails. --no-block: cloud-init's units are ordered before ssh,
+# so a blocking start from inside cloud-init deadlocks.
+runcmd:
+  - [systemctl, enable, ssh]
+  - [systemctl, start, --no-block, ssh]
+  - [bash, -c, "bash /boot/firmware/pikiosk/firstboot.sh > /var/log/pikiosk-install.log 2>&1"]
+
+power_state:
+  mode: reboot
+  message: pikiosk installed, rebooting
+  condition: true

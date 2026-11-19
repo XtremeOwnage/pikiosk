@@ -1,0 +1,13 @@
+polkit.addRule(function(action, subject) {
+  if (subject.user != "@KIOSK_USER@") return polkit.Result.NOT_HANDLED;
+  if (action.id.indexOf("org.freedesktop.NetworkManager.") == 0) return polkit.Result.YES;
+  if (action.id == "org.freedesktop.timedate1.set-timezone") return polkit.Result.YES;
+  if (action.id == "org.freedesktop.login1.reboot" ||
+      action.id == "org.freedesktop.login1.reboot-multiple-sessions" ||
+      action.id == "org.freedesktop.login1.reboot-ignore-inhibit") return polkit.Result.YES;
+  if (action.id == "org.freedesktop.systemd1.manage-units" &&
+      action.lookup("verb") == "start" &&
+      (action.lookup("unit") == "pikiosk-upgrade.service" ||
+       action.lookup("unit") == "pikiosk-rollback.service")) return polkit.Result.YES;
+  return polkit.Result.NOT_HANDLED;
+});

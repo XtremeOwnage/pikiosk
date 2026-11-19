@@ -1,0 +1,6 @@
+[Unit]
+Description=Roll back (not available on Raspberry Pi OS)
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'echo "Rollback needs the NixOS image; Raspberry Pi OS installs cannot roll back." >&2; exit 1'

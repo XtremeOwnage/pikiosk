@@ -1,0 +1,25 @@
+[Unit]
+Description=pikiosk daemon
+After=network.target NetworkManager.service
+StartLimitIntervalSec=0
+
+[Service]
+User=@KIOSK_USER@
+EnvironmentFile=/etc/default/pikiosk
+ExecStart=/usr/local/bin/kioskd
+Type=notify
+NotifyAccess=main
+WatchdogSec=90
+Restart=always
+RestartSec=3
+StateDirectory=pikiosk
+StateDirectoryMode=0700
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+[Install]
+WantedBy=multi-user.target

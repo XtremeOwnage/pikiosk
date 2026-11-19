@@ -1,0 +1,11 @@
+[Unit]
+Description=Update the system packages and pikiosk
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=DEBIAN_FRONTEND=noninteractive
+ExecStart=/usr/bin/apt-get update
+ExecStart=/usr/bin/apt-get -y -o Dpkg::Options::=--force-confold full-upgrade
+ExecStart=/usr/local/lib/pikiosk/self-update.sh
