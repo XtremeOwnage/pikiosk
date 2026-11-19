@@ -35,13 +35,18 @@ It needs no cloud services, accounts or telemetry. Everything it does stays on y
 
 ## How it works
 
-```
-MQTT (HA discovery) ─┐
-REST API ────────────┼─► kioskd ─┬─► Chromium (DevTools, loopback)  pages
-Web UI ──────────────┘           ├─► mpv                            streams, sounds
-                                 ├─► UxPlay                         AirPlay
-                                 ├─► sway / DDC/CI                  screen
-                                 └─► NetworkManager, systemd        network, updates
+```mermaid
+flowchart LR
+    HA[Home Assistant] -- MQTT --> K
+    API[REST API] --> K
+    UI[Web UI] --> K
+    SSO[OIDC provider] -. sign-in .-> UI
+    Phone[iPhone / Mac] -- AirPlay --> U
+    K[kioskd] --> C[Chromium<br/>web views]
+    K --> M[mpv<br/>streams, sounds]
+    K --> U[UxPlay<br/>AirPlay]
+    K --> S[sway, DDC/CI<br/>screen power, brightness]
+    K --> N[NetworkManager, systemd<br/>network, updates]
 ```
 
 The stock Raspberry Pi OS Lite image gets a small first-boot config that:

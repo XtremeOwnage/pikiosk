@@ -62,8 +62,13 @@ type rotation struct {
 	idx    int
 	active bool
 	timer  *time.Timer
-	gen    int
+	// preload loads the next step in the background before it is due.
+	preload *time.Timer
+	gen     int
 }
+
+// preloadLead is how long before a step ends the next one starts loading.
+const preloadLead = 15 * time.Second
 
 type target struct {
 	view string
@@ -246,7 +251,7 @@ func (k *Kiosk) viewTarget(name string) (target, int, error) {
 }
 
 func pageFor(v config.View) browser.Page {
-	p := browser.Page{URL: v.URL, CSS: v.CSS, Zoom: v.Zoom}
+	p := browser.Page{URL: v.URL, CSS: v.CSS, Zoom: v.Zoom, Keep: v.KeepLoaded}
 	if len(v.Headers) > 0 {
 		p.Headers = map[string]string{}
 		for _, h := range v.Headers {
@@ -364,7 +369,7 @@ func (k *Kiosk) rotationShow(ctx context.Context) error {
 	cfg := k.cfg.Get()
 	n := len(k.rot.items)
 	skipped := 0
-	for skipped < n && !cfg.Enabled(k.rot.items[k.rot.idx].View) {
+	for skipped < n && (k.rot.items[k.rot.idx].Disabled || !cfg.Enabled(k.rot.items[k.rot.idx].View)) {
 		k.rot.idx = (k.rot.idx + 1) % n
 		skipped++
 	}
@@ -393,6 +398,21 @@ func (k *Kiosk) rotationShow(ctx context.Context) error {
 		err = k.present(ctx, t, refresh)
 	}
 	k.mu.Lock()
+	if k.rot.gen == gen && k.rot.active && !idle {
+		if next, ok := k.nextStepLocked(k.cfg.Get()); ok {
+			k.rot.preload = time.AfterFunc(preloadDelay(time.Duration(item.Seconds)*time.Second), func() {
+				k.mu.Lock()
+				live := k.rot.gen == gen && k.rot.active
+				k.mu.Unlock()
+				if !live {
+					return
+				}
+				if err := k.browser.Preload(context.Background(), next); err != nil {
+					k.log.Warn("preload", "url", next.URL, "err", err)
+				}
+			})
+		}
+	}
 	if k.rot.gen == gen && k.rot.active {
 		k.rot.timer = time.AfterFunc(time.Duration(item.Seconds)*time.Second, func() {
 			k.mu.Lock()
@@ -416,6 +436,37 @@ func (k *Kiosk) stopRotationTimerLocked() {
 		k.rot.timer.Stop()
 		k.rot.timer = nil
 	}
+	if k.rot.preload != nil {
+		k.rot.preload.Stop()
+		k.rot.preload = nil
+	}
+}
+
+// nextStepLocked returns the web page of the next step that will be shown
+// after the current one, if it is a web view other than the current one.
+func (k *Kiosk) nextStepLocked(cfg config.Config) (browser.Page, bool) {
+	n := len(k.rot.items)
+	for i := 1; i < n; i++ {
+		it := k.rot.items[(k.rot.idx+i)%n]
+		if it.Disabled || !cfg.Enabled(it.View) {
+			continue
+		}
+		if it.View == k.rot.items[k.rot.idx].View {
+			return browser.Page{}, false
+		}
+		v, _ := cfg.View(it.View)
+		if v.Type != config.ViewWeb {
+			return browser.Page{}, false
+		}
+		return pageFor(v), true
+	}
+	return browser.Page{}, false
+}
+
+// preloadDelay leaves the current step time to load before the next one
+// competes for the CPU.
+func preloadDelay(step time.Duration) time.Duration {
+	return max(step-preloadLead, step/3)
 }
 
 func (k *Kiosk) stopRevertLocked() {

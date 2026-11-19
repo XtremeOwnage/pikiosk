@@ -42,13 +42,49 @@ async function act(fn, ok) {
   }
 }
 
+function el(tag, text, cls) {
+  const e = document.createElement(tag);
+  if (text !== undefined && text !== null) e.textContent = text;
+  if (cls) e.className = cls;
+  return e;
+}
+
+function icon(name) {
+  const s = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  s.setAttribute("class", "ic");
+  const u = document.createElementNS("http://www.w3.org/2000/svg", "use");
+  u.setAttribute("href", "#i-" + name);
+  s.append(u);
+  return s;
+}
+
+function chip(text, cls = "", ic) {
+  const c = el("span", null, "chip " + cls);
+  if (ic) c.append(icon(ic));
+  c.append(text);
+  return c;
+}
+
+function tpl(id) {
+  return $("#" + id).content.firstElementChild.cloneNode(true);
+}
+
 // --- auth ---
 
+let authInfo = {};
+
 async function boot() {
-  const a = await api("GET", "/api/auth");
-  document.title = a.device_name + " · pikiosk";
-  if (a.setup_required) return showAuth(true);
-  if (!a.authenticated) return showAuth(false);
+  const q = new URLSearchParams(location.search);
+  const loginError = q.get("login_error");
+  if (loginError) history.replaceState(null, "", location.pathname + location.hash);
+  authInfo = await api("GET", "/api/auth");
+  document.title = authInfo.device_name + " · pikiosk";
+  if (authInfo.setup_required) return showAuth(true);
+  if (!authInfo.authenticated) {
+    showAuth(false);
+    if (loginError) $("#auth-error").textContent = loginError;
+    return;
+  }
   startApp();
 }
 
@@ -56,13 +92,16 @@ function showAuth(setup) {
   stopTimers();
   $("#app").hidden = true;
   $("#auth").hidden = false;
-  $("#auth-title").textContent = setup ? "Set up pikiosk" : "pikiosk";
+  $("#auth-title").textContent = authInfo.device_name || "pikiosk";
   $("#auth-hint").textContent = setup ? "Choose an admin password for this kiosk." : "";
-  $("#auth-confirm").hidden = !setup;
+  $("#auth-confirm-field").hidden = !setup;
   $("#auth-confirm").required = setup;
   $("#auth-password").autocomplete = setup ? "new-password" : "current-password";
   $("#auth-submit").textContent = setup ? "Save password" : "Log in";
   $("#auth-form").dataset.setup = setup ? "1" : "";
+  const sso = !setup && authInfo.oidc;
+  $("#auth-sso").hidden = !sso;
+  if (sso) $("#auth-sso-btn span").textContent = authInfo.oidc.label;
   $("#auth-password").focus();
 }
 
@@ -78,6 +117,7 @@ $("#auth-form").addEventListener("submit", async (e) => {
   try {
     await api("POST", setup ? "/api/setup" : "/api/login", { password: pw });
     $("#auth-password").value = $("#auth-confirm").value = "";
+    authInfo = await api("GET", "/api/auth");
     startApp();
   } catch (err) {
     $("#auth-error").textContent = err.message;
@@ -86,6 +126,7 @@ $("#auth-form").addEventListener("submit", async (e) => {
 
 $("#logout").addEventListener("click", async () => {
   await api("POST", "/api/logout");
+  authInfo = await api("GET", "/api/auth");
   showAuth(false);
 });
 
@@ -94,6 +135,7 @@ $("#logout").addEventListener("click", async () => {
 function startApp() {
   $("#auth").hidden = true;
   $("#app").hidden = false;
+  $("#whoami").textContent = authInfo.user && authInfo.user !== "admin" ? authInfo.user : "";
   loadConfig().then(() => selectTab(location.hash.slice(1) || "control"));
   refreshState();
   stopTimers();
@@ -106,13 +148,12 @@ function stopTimers() {
   stateTimer = liveTimer = null;
 }
 
-$$("#tabs button").forEach((b) => b.addEventListener("click", () => selectTab(b.dataset.tab)));
 window.addEventListener("hashchange", () => !$("#app").hidden && selectTab(location.hash.slice(1)));
 
 function selectTab(tab) {
   if (!$(`[data-panel="${tab}"]`)) tab = "control";
-  history.replaceState(null, "", "#" + tab);
-  $$("#tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
+  if (location.hash !== "#" + tab) history.replaceState(null, "", "#" + tab);
+  $$("#tabs a").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
   $$("[data-panel]").forEach((p) => (p.hidden = p.dataset.panel !== tab));
   clearInterval(liveTimer);
   liveTimer = null;
@@ -120,72 +161,94 @@ function selectTab(tab) {
   if (tab === "network") loadNetwork();
   if (tab === "system") loadSystem();
   if (tab === "sounds") loadSounds();
+  window.scrollTo(0, 0);
 }
 
 async function loadConfig() {
   config = await api("GET", "/api/config");
   $("#device-name").textContent = config.device_name;
-  fillViews();
+  renderViews();
   fillForm($("#mqtt-form"), config.mqtt);
   fillForm($("#display-form"), config.display);
   fillForm($("#sleep-form"), config.sleep);
   fillWeekdays(config.sleep.schedule_weekdays || []);
   fillForm($("#general-form"), config);
   fillForm($("#cast-form"), config.cast || {});
+  fillOIDC();
   renderTopics();
-  fillRotations();
+  if (!rotationsDirty) renderRotations();
   $("#volume-save").checked = (config.audio || {}).volume >= 0;
 }
 
 function fillForm(form, obj) {
-  for (const el of form.elements) {
-    if (!el.name || !(el.name in obj)) continue;
-    if (el.type === "checkbox") el.checked = !!obj[el.name];
-    else el.value = obj[el.name] ?? "";
+  for (const e of form.elements) {
+    if (!e.name || !(e.name in obj)) continue;
+    if (e.type === "checkbox") e.checked = !!obj[e.name];
+    else e.value = obj[e.name] ?? "";
   }
 }
 
 function readForm(form, template) {
   const out = {};
-  for (const el of form.elements) {
-    if (!el.name || !(el.name in template)) continue;
-    const t = typeof template[el.name];
-    if (el.type === "checkbox") out[el.name] = el.checked;
-    else if (t === "number") out[el.name] = el.value === "" ? 0 : Number(el.value);
-    else out[el.name] = el.value;
+  for (const e of form.elements) {
+    if (!e.name || !(e.name in template)) continue;
+    const t = typeof template[e.name];
+    if (e.type === "checkbox") out[e.name] = e.checked;
+    else if (t === "number") out[e.name] = e.value === "" ? 0 : Number(e.value);
+    else out[e.name] = e.value;
   }
   return out;
 }
 
+function fillSelect(select, names, empty, extra = []) {
+  const cur = select.value;
+  if (!names.length && !extra.length) {
+    select.replaceChildren(new Option(empty, ""));
+    select.disabled = true;
+    return;
+  }
+  select.disabled = false;
+  select.replaceChildren(...extra.map(([l, v]) => new Option(l, v)), ...names.map((n) => new Option(n, n)));
+  if ([...select.options].some((o) => o.value === cur)) select.value = cur;
+}
+
 // --- control ---
+
+function tile(k, v, s, cls = "") {
+  const t = el("div", null, "tile " + cls);
+  t.append(el("div", k, "k"), el("div", v, "v"));
+  if (s) t.append(el("div", s, "s"));
+  t.title = [v, s].filter(Boolean).join("\n");
+  return t;
+}
 
 async function refreshState() {
   let s;
   try {
     s = await api("GET", "/api/state");
   } catch {
+    setBrand(false, "offline");
     return;
   }
   const st = s.state;
-  const rows = [
-    ["Mode", st.mode],
-    ["View", st.view || "—"],
-    ["URL", st.url || "—"],
-    ["Screen", (st.screen ? "on" : "off") + (st.screen_reason ? ` (${st.screen_reason})` : "")],
-    ["Brightness", st.brightness >= 0 ? st.brightness + "%" : "not set"],
-    ["Reverts", st.revert_at ? new Date(st.revert_at).toLocaleTimeString() : "—"],
-    ["Browser", s.browser.connected ? "connected" : s.browser.running ? "starting" : "stopped"],
-    ["MQTT", s.mqtt],
-  ];
-  if (s.browser.last_error) rows.push(["Browser error", s.browser.last_error]);
-  if (s.player.last_error) rows.push(["Stream error", s.player.last_error]);
-  rows.splice(6, 0,
-    ["Rotation", st.rotation ? `${st.rotation} (${st.rotation_active ? "running, view " + (st.rotation_index + 1) : "stopped"})` : "—"],
-    ["Sound", st.sound || "—"],
-    ["Casting", st.casting ? "AirPlay" : "—"]);
   const dev = s.device || {};
-  if (dev.cpu_temp_c !== undefined) rows.push(["CPU", `${dev.cpu_temp_c} °C, load ${dev.load ?? "?"}`]);
-  $("#status").replaceChildren(...rows.flatMap(([k, v]) => [el("dt", k), el("dd", v)]));
+  const browser = s.browser.connected ? "connected" : s.browser.running ? "starting" : "stopped";
+  setBrand(s.browser.connected, st.screen ? "screen on" : "screen off");
+  const showing = st.casting ? "AirPlay" : st.view || (st.mode === "stream" ? "Stream" : st.url ? "URL" : "—");
+  const tiles = [
+    tile("Showing", showing, st.casting ? "a device is casting" : st.url || "", "wide"),
+    tile("Rotation", st.rotation || "—", st.rotation ? (st.rotation_active ? `running, step ${st.rotation_index + 1}` : "stopped") : ""),
+    tile("Screen", st.screen ? "On" : "Off", [st.screen_reason, st.brightness >= 0 ? st.brightness + "% brightness" : ""].filter(Boolean).join(" · ")),
+    tile("Reverts", st.revert_at ? new Date(st.revert_at).toLocaleTimeString() : "—", st.revert_at ? "back to rotation or default" : ""),
+    tile("Browser", browser, [s.player.playing ? "stream playing" : "", s.browser.background_tabs ? `${s.browser.background_tabs} background tab${s.browser.background_tabs > 1 ? "s" : ""}` : ""].filter(Boolean).join(" · ")),
+    tile("MQTT", s.mqtt, ""),
+  ];
+  if (st.sound) tiles.push(tile("Sound", st.sound, ""));
+  if (dev.cpu_temp_c !== undefined) tiles.push(tile("Pi", `${dev.cpu_temp_c} °C`, `load ${dev.load ?? "?"}`));
+  if (s.browser.last_error) tiles.push(tile("Browser error", s.browser.last_error, "", "wide err"));
+  if (s.player.last_error) tiles.push(tile("Stream error", s.player.last_error, "", "wide err"));
+  $("#status").replaceChildren(...tiles);
+
   const vol = $("#volume");
   if (document.activeElement !== vol && st.volume >= 0) vol.value = st.volume;
   $("#volume-val").textContent = st.volume >= 0 ? st.volume + "%" : "";
@@ -200,16 +263,15 @@ async function refreshState() {
   const cs = $("#cast-status");
   cs.textContent = !c.available ? "not installed" : !c.enabled ? "off" : c.active ? "casting" : c.running ? "ready" : "starting";
   cs.className = "badge " + (c.active || (c.enabled && c.running) ? "ok" : c.enabled ? "bad" : "");
-  if (c.last_error) cs.title = c.last_error;
+  cs.title = c.last_error || "";
   const ms = $("#mqtt-status");
   ms.textContent = s.mqtt;
   ms.className = "badge " + (s.mqtt === "connected" ? "ok" : s.mqtt === "disabled" ? "" : "bad");
 }
 
-function el(tag, text) {
-  const e = document.createElement(tag);
-  if (text !== undefined) e.textContent = text;
-  return e;
+function setBrand(ok, text) {
+  $("#brand-status .dot").className = "dot " + (ok ? "ok" : "bad");
+  $("#brand-status span").textContent = text;
 }
 
 function duration() {
@@ -220,6 +282,7 @@ $("#ctl-show").addEventListener("click", () =>
   act(() => api("POST", "/api/view", { name: $("#ctl-view").value, duration: duration() }), "Showing view").then(refreshState));
 $("#ctl-open").addEventListener("click", () => {
   const url = $("#ctl-url").value.trim();
+  if (!url) return;
   const stream = /^(rtsps?|rtmp|srt|udp|rtp):/i.test(url);
   act(() => api("POST", stream ? "/api/stream" : "/api/url", { url, duration: duration() }), "Opened").then(refreshState);
 });
@@ -292,169 +355,384 @@ $("#clear-browser").addEventListener("click", () => {
 
 // --- views ---
 
-function fillViews() {
-  $("#views-body").replaceChildren();
-  for (const v of config.views || []) addViewRow(v);
-  syncViewSelects();
+const AUTH_LABELS = { basic: "Basic auth", bearer: "Bearer token", home_assistant: "HA token" };
+
+function viewChips(v) {
+  const out = [];
+  out.push(chip(v.type === "stream" ? "Stream" : "Web"));
+  if (v.name === config.default_view) out.push(chip("Default", "accent", "star"));
+  if (v.disabled) out.push(chip("Skipped in rotations", "warn"));
+  if (v.auth && v.auth.type) out.push(chip(AUTH_LABELS[v.auth.type] || v.auth.type, "", "lock"));
+  if (v.headers && v.headers.length) out.push(chip(v.headers.length + (v.headers.length === 1 ? " header" : " headers")));
+  if (v.css) out.push(chip("CSS"));
+  if (v.zoom && v.zoom !== 1) out.push(chip(Math.round(v.zoom * 100) + "%"));
+  if (v.refresh_seconds) out.push(chip("reload " + fmtSeconds(v.refresh_seconds)));
+  if (v.keep_loaded) out.push(chip("kept loaded"));
+  return out;
 }
 
-// Settings edited in the Customize dialog live on the row, not in inputs.
-const viewExtras = new WeakMap();
-
-function extrasOf(v) {
-  return {
-    auth: v.auth ? { ...v.auth } : {},
-    headers: (v.headers || []).map((h) => ({ ...h })),
-    css: v.css || "",
-    zoom: v.zoom || 0,
-    refresh_seconds: v.refresh_seconds || 0,
-  };
+function fmtSeconds(s) {
+  if (!s) return "0s";
+  if (s % 3600 === 0) return s / 3600 + "h";
+  if (s % 60 === 0) return s / 60 + "m";
+  return s + "s";
 }
 
-function customized(x) {
-  return !!(x.auth.type || x.headers.length || x.css || x.zoom || x.refresh_seconds);
+function renderViews() {
+  const views = config.views || [];
+  $("#views-list").replaceChildren(...views.map((v, i) => {
+    const row = tpl("view-item");
+    row.classList.toggle("off", !!v.disabled);
+    $("[data-f=name]", row).textContent = v.name;
+    $("[data-f=url]", row).textContent = v.url;
+    $("[data-f=url]", row).title = v.url;
+    $("[data-f=chips]", row).replaceChildren(...viewChips(v));
+    const sw = $("[data-f=enabled]", row);
+    sw.checked = !v.disabled;
+    sw.addEventListener("change", async () => {
+      const ok = await act(() => api("POST", sw.checked ? "/api/view/enable" : "/api/view/disable", { name: v.name }),
+        sw.checked ? `${v.name} is back in rotations` : `${v.name} is skipped in rotations`);
+      if (!ok) sw.checked = !sw.checked;
+      await loadConfig();
+    });
+    $("[data-act=show]", row).addEventListener("click", () =>
+      act(() => api("POST", "/api/view", { name: v.name }), "Showing " + v.name).then(refreshState));
+    $("[data-act=edit]", row).addEventListener("click", () => openEditor(i));
+    $("[data-act=up]", row).disabled = i === 0;
+    $("[data-act=down]", row).disabled = i === views.length - 1;
+    $("[data-act=up]", row).addEventListener("click", () => moveView(i, -1));
+    $("[data-act=down]", row).addEventListener("click", () => moveView(i, 1));
+    return row;
+  }));
+  $("#views-empty").hidden = views.length > 0;
+  $("#views-list").hidden = views.length === 0;
+  const names = views.map((v) => v.name);
+  fillSelect($("#views-default"), names, "(no views yet)", [["(none)", ""]]);
+  $("#views-default").value = config.default_view || "";
+  fillSelect($("#ctl-view"), names, "(no views yet)");
+  $("#ctl-show").disabled = !names.length;
 }
 
-function markCustomized(row) {
-  const btn = $("[data-act=customize]", row);
-  const on = customized(viewExtras.get(row));
-  btn.classList.toggle("on", on);
-  btn.textContent = on ? "Customize •" : "Customize";
+async function saveViews(views, defaultView = config.default_view, renames) {
+  const body = { views, default_view: defaultView };
+  if (renames && Object.keys(renames).length) body.renames = renames;
+  await api("PUT", "/api/config/views", body);
+  await loadConfig();
 }
 
-function addViewRow(v = { name: "", type: "web", url: "" }) {
-  const row = $("#view-row").content.firstElementChild.cloneNode(true);
-  $("[data-f=enabled]", row).checked = !v.disabled;
-  $("[data-f=name]", row).value = v.name;
-  $("[data-f=type]", row).value = v.type || "web";
-  $("[data-f=url]", row).value = v.url;
-  viewExtras.set(row, extrasOf(v));
-  markCustomized(row);
-  $("[data-f=name]", row).addEventListener("input", syncViewSelects);
-  $("[data-act=del]", row).addEventListener("click", () => { row.remove(); syncViewSelects(); });
-  $("[data-act=up]", row).addEventListener("click", () => {
-    if (row.previousElementSibling) row.parentNode.insertBefore(row, row.previousElementSibling);
-    syncViewSelects();
-  });
-  $("[data-act=show]", row).addEventListener("click", () =>
-    act(() => api("POST", "/api/view", { name: $("[data-f=name]", row).value }), "Showing view (save first if changed)"));
-  $("[data-act=customize]", row).addEventListener("click", () => openCustomize(row));
-  $("#views-body").append(row);
+async function moveView(i, d) {
+  const views = [...config.views];
+  const [v] = views.splice(i, 1);
+  views.splice(i + d, 0, v);
+  await act(() => saveViews(views));
 }
 
-function readViews() {
-  return $$("#views-body tr").map((row) => {
-    const x = viewExtras.get(row);
-    const type = $("[data-f=type]", row).value;
-    const v = {
-      name: $("[data-f=name]", row).value.trim(),
-      type,
-      url: $("[data-f=url]", row).value.trim(),
-      disabled: !$("[data-f=enabled]", row).checked,
-    };
-    if (type === "web") {
-      if (x.auth.type) v.auth = x.auth;
-      if (x.headers.length) v.headers = x.headers;
-      if (x.css) v.css = x.css;
-      if (x.zoom) v.zoom = x.zoom;
-      if (x.refresh_seconds) v.refresh_seconds = x.refresh_seconds;
-    }
-    return v;
-  });
-}
+$("#views-default").addEventListener("change", (e) => act(() => saveViews(config.views, e.target.value), "Default view saved"));
 
-let czRow = null;
+// View editor drawer.
+
+let editIndex = -1;
+const ve = $("#ve-form");
 
 function addHeaderRow(h = { name: "", value: "" }) {
-  const r = $("#header-row").content.firstElementChild.cloneNode(true);
+  const r = tpl("header-row");
   $("[data-f=name]", r).value = h.name;
   $("[data-f=value]", r).value = h.value;
   $("[data-act=del]", r).addEventListener("click", () => r.remove());
-  $("#cz-headers").append(r);
+  $("#ve-headers").append(r);
 }
 
-function syncAuthFields() {
-  const t = $("#customize-form").auth_type.value;
-  $$("[data-auth]").forEach((e) => {
+function syncEditor() {
+  const type = ve.type.value || "web";
+  const web = type === "web";
+  $("#ve-web").hidden = !web;
+  $("#ve-stream").hidden = web;
+  $("#ve-url-hint").textContent = web ? "http:// or https:// page." : "rtsp://, rtmp://, srt:// or an HLS/HTTP video URL.";
+  ve.url.placeholder = web ? "https://dashboard.lan/" : "rtsp://camera.lan/stream";
+  const t = ve.auth_type.value;
+  $$("[data-auth]", ve).forEach((e) => {
     const k = e.dataset.auth;
-    e.hidden = !(k === t
-      || (k === "token" && (t === "bearer" || t === "home_assistant"))
-      || (k === "header" && t && t !== "home_assistant"));
+    e.hidden = !(k === t || (k === "token" && (t === "bearer" || t === "home_assistant")));
   });
 }
 
-function openCustomize(row) {
-  czRow = row;
-  const x = viewExtras.get(row);
-  const f = $("#customize-form");
-  const web = $("[data-f=type]", row).value === "web";
-  $("#cz-name").textContent = $("[data-f=name]", row).value || "view";
-  $("#cz-web").hidden = !web;
-  $("#cz-stream").hidden = web;
-  f.auth_type.value = x.auth.type || "";
-  f.auth_username.value = x.auth.username || "";
-  f.auth_password.value = x.auth.password || "";
-  f.auth_token.value = x.auth.token || "";
-  f.zoom.value = x.zoom || "";
-  f.refresh_seconds.value = x.refresh_seconds || "";
-  f.css.value = x.css;
-  $("#cz-headers").replaceChildren();
-  x.headers.forEach(addHeaderRow);
-  syncAuthFields();
-  $("#customize").showModal();
+function openEditor(i) {
+  editIndex = i;
+  const v = i >= 0 ? config.views[i] : { name: "", type: "web", url: "" };
+  $("#ve-title").textContent = i >= 0 ? "Configure " + v.name : "New view";
+  $("#ve-error").textContent = "";
+  ve.name.value = v.name;
+  ve.type.value = v.type || "web";
+  ve.url.value = v.url;
+  ve.enabled.checked = !v.disabled;
+  ve.default.checked = i >= 0 && config.default_view === v.name;
+  const a = v.auth || {};
+  ve.auth_type.value = a.type || "";
+  ve.auth_username.value = a.username || "";
+  ve.auth_password.value = a.password || "";
+  ve.auth_token.value = a.token || "";
+  ve.zoom.value = v.zoom || "";
+  ve.refresh_seconds.value = v.refresh_seconds || "";
+  ve.css.value = v.css || "";
+  ve.keep_loaded.checked = !!v.keep_loaded;
+  $("#ve-headers").replaceChildren();
+  (v.headers || []).forEach(addHeaderRow);
+  $("[data-act=delete]", ve).hidden = i < 0;
+  syncEditor();
+  $("#view-editor").showModal();
+  (i >= 0 ? ve.url : ve.name).focus();
 }
 
-$("#customize-form").auth_type.addEventListener("change", syncAuthFields);
-$("#cz-header-add").addEventListener("click", () => addHeaderRow());
-$("#customize").addEventListener("close", () => {
-  const row = czRow;
-  czRow = null;
-  if ($("#customize").returnValue !== "ok" || !row) return;
-  const f = $("#customize-form");
-  const t = f.auth_type.value;
-  const auth = !t ? {} : t === "basic"
-    ? { type: t, username: f.auth_username.value.trim(), password: f.auth_password.value }
-    : { type: t, token: f.auth_token.value.trim() };
-  viewExtras.set(row, {
-    auth,
-    headers: $$("#cz-headers .row")
+function readEditor() {
+  const type = ve.type.value || "web";
+  const v = { name: ve.name.value.trim(), type, url: ve.url.value.trim(), disabled: !ve.enabled.checked };
+  if (type === "web") {
+    const t = ve.auth_type.value;
+    if (t === "basic") v.auth = { type: t, username: ve.auth_username.value.trim(), password: ve.auth_password.value };
+    else if (t) v.auth = { type: t, token: ve.auth_token.value.trim() };
+    const headers = $$("#ve-headers .header-row")
       .map((r) => ({ name: $("[data-f=name]", r).value.trim(), value: $("[data-f=value]", r).value }))
-      .filter((h) => h.name),
-    css: f.css.value,
-    zoom: Number(f.zoom.value) || 0,
-    refresh_seconds: Number(f.refresh_seconds.value) || 0,
-  });
-  markCustomized(row);
+      .filter((h) => h.name);
+    if (headers.length) v.headers = headers;
+    if (ve.css.value.trim()) v.css = ve.css.value;
+    if (Number(ve.zoom.value)) v.zoom = Number(ve.zoom.value);
+    if (Number(ve.refresh_seconds.value)) v.refresh_seconds = Number(ve.refresh_seconds.value);
+    if (ve.keep_loaded.checked) v.keep_loaded = true;
+  }
+  return v;
+}
+
+ve.addEventListener("change", (e) => (e.target.name === "type" || e.target.name === "auth_type") && syncEditor());
+$("#ve-header-add").addEventListener("click", () => addHeaderRow());
+$$("[data-act=close]", ve).forEach((b) => b.addEventListener("click", () => $("#view-editor").close()));
+$("#view-editor").addEventListener("click", (e) => e.target === e.currentTarget && $("#view-editor").close());
+$("#view-add").addEventListener("click", () => openEditor(-1));
+
+ve.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const v = readEditor();
+  const err = $("#ve-error");
+  if (!v.name) return (err.textContent = "Give the view a name.");
+  if (!v.url) return (err.textContent = "Enter a URL.");
+  const views = [...config.views];
+  const renames = {};
+  if (editIndex >= 0) {
+    const old = views[editIndex].name;
+    if (old !== v.name) renames[old] = v.name;
+    views[editIndex] = v;
+  } else {
+    views.push(v);
+  }
+  let def = config.default_view;
+  if (ve.default.checked) def = v.name;
+  else if (def === v.name || (editIndex >= 0 && def === config.views[editIndex].name)) def = "";
+  try {
+    await saveViews(views, def, renames);
+    $("#view-editor").close();
+    toast(editIndex >= 0 ? "View saved" : "View added");
+  } catch (ex) {
+    err.textContent = ex.message;
+  }
 });
 
-function fillSelect(select, names, empty) {
-  const cur = select.value;
-  if (!names.length) {
-    select.replaceChildren(new Option(empty, ""));
-    select.disabled = true;
+$("[data-act=delete]", ve).addEventListener("click", async () => {
+  const v = config.views[editIndex];
+  const used = (config.rotations || []).filter((r) => r.items.some((it) => it.view === v.name)).map((r) => r.name);
+  if (used.length) {
+    $("#ve-error").textContent = `${v.name} is used by ${used.join(", ")}. Remove it there first, or switch it off instead.`;
     return;
   }
-  select.disabled = false;
-  select.replaceChildren(...names.map((n) => new Option(n, n)));
-  if (names.includes(cur)) select.value = cur;
-}
-
-function syncViewSelects() {
-  const names = readViews().map((v) => v.name).filter(Boolean);
-  const def = $("#views-default");
-  const cur = def.value || config.default_view;
-  def.replaceChildren(new Option("(none)", ""), ...names.map((n) => new Option(n, n)));
-  def.value = names.includes(cur) ? cur : "";
-  const saved = (config.views || []).map((v) => v.name);
-  fillSelect($("#ctl-view"), saved, "(no views yet)");
-  $("#ctl-show").disabled = !saved.length;
-}
-
-$("#view-add").addEventListener("click", () => addViewRow());
-$("#views-save").addEventListener("click", async () => {
-  await act(() => api("PUT", "/api/config/views", { views: readViews(), default_view: $("#views-default").value }), "Views saved");
-  await loadConfig();
+  if (!confirm(`Delete the view ${v.name}?`)) return;
+  const views = config.views.filter((_, i) => i !== editIndex);
+  try {
+    await saveViews(views, config.default_view === v.name ? "" : config.default_view);
+    $("#view-editor").close();
+    toast("View deleted");
+  } catch (ex) {
+    $("#ve-error").textContent = ex.message;
+  }
 });
+
+// --- rotations ---
+
+let rotationsDirty = false;
+
+function setRotationsDirty(d) {
+  rotationsDirty = d;
+  $("#rotations-savebar").hidden = !d;
+}
+
+$("#rot-start").addEventListener("click", () =>
+  act(() => api("POST", "/api/rotation", { name: $("#ctl-rotation").value }), "Rotation started").then(refreshState));
+$("#rot-resume").addEventListener("click", () => act(() => api("POST", "/api/rotation/resume"), "Rotation resumed").then(refreshState));
+$("#rot-next").addEventListener("click", () => act(() => api("POST", "/api/rotation/next")).then(refreshState));
+$("#rot-stop").addEventListener("click", () => act(() => api("POST", "/api/rotation/stop"), "Rotation stopped").then(refreshState));
+
+function renderRotations() {
+  $("#rotations").replaceChildren();
+  for (const r of config.rotations || []) addRotationCard(r);
+  syncRotations();
+  setRotationsDirty(false);
+}
+
+function viewOptions(select, value) {
+  const views = config.views || [];
+  select.replaceChildren(...views.map((v) => new Option(v.name, v.name)));
+  if (value && !views.some((v) => v.name === value)) select.append(new Option(value + " (missing)", value));
+  if (value) select.value = value;
+}
+
+function syncStep(li) {
+  const name = $("[data-f=view]", li).value;
+  const v = (config.views || []).find((x) => x.name === name);
+  const on = $("[data-f=enabled]", li).checked;
+  li.classList.toggle("off", !on || !!(v && v.disabled));
+  $("[data-f=note]", li).textContent = !on ? "skipped" : v && v.disabled ? "view is switched off" : "";
+}
+
+function addRotationItem(list, item = { view: "", seconds: 30 }) {
+  const li = tpl("rotation-item");
+  viewOptions($("[data-f=view]", li), item.view);
+  $("[data-f=seconds]", li).value = item.seconds;
+  $("[data-f=enabled]", li).checked = !item.disabled;
+  $("[data-act=del]", li).addEventListener("click", () => { li.remove(); syncRotations(); });
+  $("[data-act=up]", li).addEventListener("click", () => { li.previousElementSibling && list.insertBefore(li, li.previousElementSibling); syncRotations(); });
+  $("[data-act=down]", li).addEventListener("click", () => { li.nextElementSibling && list.insertBefore(li.nextElementSibling, li); syncRotations(); });
+  li.addEventListener("change", () => syncStep(li));
+  list.append(li);
+  syncStep(li);
+}
+
+function addRotationCard(r = { name: "", items: [] }) {
+  const card = tpl("rotation-card");
+  const list = $(".steps", card);
+  $("[data-f=name]", card).value = r.name;
+  for (const it of r.items) addRotationItem(list, it);
+  $("[data-act=add-item]", card).addEventListener("click", () => { addRotationItem(list); syncRotations(); setRotationsDirty(true); });
+  $("[data-act=del]", card).addEventListener("click", () => {
+    if (r.name && !confirm(`Delete the rotation ${r.name}?`)) return;
+    card.remove();
+    syncRotations();
+    setRotationsDirty(true);
+  });
+  $("[data-act=start]", card).addEventListener("click", () => {
+    if (rotationsDirty) return toast("Save your changes first", true);
+    act(() => api("POST", "/api/rotation", { name: $("[data-f=name]", card).value }), "Rotation started").then(refreshState);
+  });
+  $("#rotations").append(card);
+  return card;
+}
+
+function readRotations() {
+  return $$("#rotations .rotation").map((card) => ({
+    name: $("[data-f=name]", card).value.trim(),
+    items: $$(".step", card).map((li) => {
+      const it = { view: $("[data-f=view]", li).value, seconds: Number($("[data-f=seconds]", li).value) || 0 };
+      if (!$("[data-f=enabled]", li).checked) it.disabled = true;
+      return it;
+    }),
+  }));
+}
+
+function syncRotations() {
+  const cards = $$("#rotations .rotation");
+  $("#rotations-empty").hidden = cards.length > 0;
+  for (const card of cards) {
+    $$(".step", card).forEach((li, i) => {
+      $(".num", li).textContent = i + 1;
+      $("[data-act=up]", li).disabled = i === 0;
+      $("[data-act=down]", li).disabled = !li.nextElementSibling;
+    });
+    const steps = $$(".step", card);
+    const active = steps.filter((li) => !li.classList.contains("off"));
+    const total = active.reduce((n, li) => n + (Number($("[data-f=seconds]", li).value) || 0), 0);
+    const chips = [chip(`${active.length} of ${steps.length} steps`), chip(fmtSeconds(total) + " cycle")];
+    if ($("[data-f=name]", card).value.trim() === config.default_rotation) chips.unshift(chip("Starts at boot", "accent", "star"));
+    $("[data-f=chips]", card).replaceChildren(...chips);
+  }
+  const names = readRotations().map((r) => r.name).filter(Boolean);
+  const def = $("#rotations-default");
+  const cur = rotationsDirty ? def.value : config.default_rotation;
+  def.replaceChildren(new Option("(none — show the default view)", ""), ...names.map((n) => new Option(n, n)));
+  def.value = names.includes(cur) ? cur : "";
+  const saved = (config.rotations || []).map((r) => r.name);
+  fillSelect($("#ctl-rotation"), saved, "(no rotations yet)");
+  $("#rot-start").disabled = !saved.length;
+}
+
+$("#rotations").addEventListener("input", () => { setRotationsDirty(true); syncRotations(); });
+$("#rotations").addEventListener("change", () => { setRotationsDirty(true); syncRotations(); });
+$("#rotations-default").addEventListener("change", () => setRotationsDirty(true));
+$("#rotation-add").addEventListener("click", () => {
+  if (!(config.views || []).length) return toast("Add some views first", true);
+  const card = addRotationCard();
+  addRotationItem($(".steps", card));
+  syncRotations();
+  setRotationsDirty(true);
+  $("[data-f=name]", card).focus();
+});
+$("#rotations-discard").addEventListener("click", () => renderRotations());
+$("#rotations-save").addEventListener("click", async () => {
+  const ok = await act(() => api("PUT", "/api/config/rotations", { rotations: readRotations(), default_rotation: $("#rotations-default").value }), "Rotations saved");
+  if (ok) {
+    setRotationsDirty(false);
+    await loadConfig();
+  }
+});
+window.addEventListener("beforeunload", (e) => rotationsDirty && e.preventDefault());
+
+// --- sound & cast ---
+
+async function loadSounds() {
+  const list = await act(() => api("GET", "/api/sounds"));
+  const ul = $("#sounds-list");
+  if (!list || !list.length) return ul.replaceChildren(el("li", "No sounds yet", "muted"));
+  ul.replaceChildren(...list.map((snd) => {
+    const li = el("li");
+    li.append(el("span", snd.name, "name"));
+    if (snd.builtin) li.append(chip("built-in"));
+    li.append(el("span", Math.max(1, Math.round(snd.size / 1024)) + " KiB", "muted small"));
+    const play = el("button", null, "btn sm icon");
+    play.title = "Play";
+    play.setAttribute("aria-label", "Play " + snd.name);
+    play.append(icon("play"));
+    play.addEventListener("click", () => act(() => api("POST", "/api/sound/play", { name: snd.name })));
+    li.append(play);
+    if (!snd.builtin) {
+      const del = el("button", null, "btn sm icon ghost danger");
+      del.title = "Delete";
+      del.setAttribute("aria-label", "Delete " + snd.name);
+      del.append(icon("trash"));
+      del.addEventListener("click", async () => {
+        if (!confirm(`Delete ${snd.name}?`)) return;
+        await act(() => api("DELETE", "/api/sounds/" + encodeURIComponent(snd.name)), "Deleted");
+        loadSounds();
+      });
+      li.append(del);
+    }
+    return li;
+  }));
+}
+
+$("#sound-upload input[type=file]").addEventListener("change", async (e) => {
+  if (!e.target.files.length) return;
+  const res = await fetch("/api/sounds", { method: "POST", headers: { "X-Pikiosk": "1" }, body: new FormData($("#sound-upload")) });
+  const data = await res.json().catch(() => ({}));
+  e.target.value = "";
+  if (!res.ok) return toast(data.error || res.statusText, true);
+  toast("Uploaded " + data.name);
+  loadSounds();
+});
+$("#sound-play").addEventListener("click", () => act(() => api("POST", "/api/sound/play", { path: $("#sound-url").value.trim() })));
+$("#sound-stop").addEventListener("click", () => act(() => api("POST", "/api/sound/stop")));
+$("#volume").addEventListener("input", (e) => ($("#volume-val").textContent = e.target.value + "%"));
+$("#volume").addEventListener("change", async (e) => {
+  const v = Number(e.target.value);
+  await act(() => api("POST", "/api/volume", { value: v }), `Volume ${v}%`);
+  if ($("#volume-save").checked) await act(() => api("PUT", "/api/config/audio", { volume: v }));
+});
+$("#volume-save").addEventListener("change", (e) =>
+  act(() => api("PUT", "/api/config/audio", { volume: e.target.checked ? Number($("#volume").value) : -1 }), "Saved"));
 
 $("#cast-form").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -470,8 +748,20 @@ $("#mqtt-form").addEventListener("submit", async (e) => {
   await loadConfig();
 });
 
+$("#mqtt-republish").addEventListener("click", async () => {
+  const r = await act(() => api("POST", "/api/mqtt/discovery"));
+  if (r) toast("Published to " + r.topic);
+});
+$("#mqtt-clear").addEventListener("click", async () => {
+  if (!confirm("Delete this kiosk's retained MQTT messages? Home Assistant removes the device until it is published again.")) return;
+  const r = await act(() => api("POST", "/api/mqtt/clear"));
+  if (r) toast(`Cleared ${r.topics.length} retained topics`);
+});
+
 function renderTopics() {
   const b = config.mqtt.base_topic;
+  $("#mqtt-discovery-topic").textContent = `${config.mqtt.discovery_prefix}/device/${config.device_id}/config`;
+  $("#mqtt-republish").disabled = !config.mqtt.discovery;
   $("#mqtt-topics").textContent = [
     `${b}/availability            online | offline (retained)`,
     `${b}/state                   JSON state (retained)`,
@@ -510,37 +800,42 @@ async function loadNetwork() {
   try {
     ifs = await api("GET", "/api/network");
   } catch (e) {
-    list.textContent = e.message;
+    list.replaceChildren(el("div", e.message, "card error"));
     return;
   }
   list.replaceChildren(...(ifs || []).map(netCard));
 }
 
 function netCard(it) {
-  const div = el("div");
-  div.className = "net";
-  const head = el("p");
-  head.append(el("strong", `${it.device} (${it.type})`), ` — ${it.state}${it.connection ? ", " + it.connection : ""}`);
-  const kv = el("dl");
-  kv.className = "kv";
+  const card = el("div", null, "card net");
+  const head = el("div", null, "card-head");
+  head.append(el("h2", it.device));
+  head.append(chip(it.type));
+  if (it.connection) head.append(chip(it.connection));
+  const st = el("span", it.state, "badge " + (/^connected/.test(it.state) ? "ok" : ""));
+  head.append(st);
+  const kv = el("dl", null, "kv");
   for (const [k, v] of [["Addresses", (it.addresses || []).join(", ") || "—"], ["Gateway", it.gateway || "—"], ["DNS", (it.dns || []).join(", ") || "—"]])
     kv.append(el("dt", k), el("dd", v));
-  div.append(head, kv);
-  if (!it.connection) return div;
+  card.append(head, kv);
+  if (!it.connection) return card;
 
   const form = document.createElement("form");
   form.innerHTML = `
-    <div class="row">
-      <select name="method"><option value="auto">DHCP</option><option value="manual">Static</option></select>
-      <input name="address" placeholder="192.168.1.50/24">
-      <input name="gateway" placeholder="Gateway">
-      <input name="dns" placeholder="DNS, comma separated">
-      <button class="primary">Apply</button>
-    </div>`;
+    <div class="grid-fields">
+      <label class="field"><span>IPv4</span><select name="method"><option value="auto">DHCP</option><option value="manual">Static</option></select></label>
+      <label class="field"><span>Address</span><input name="address" placeholder="192.168.1.50/24"></label>
+      <label class="field"><span>Gateway</span><input name="gateway"></label>
+      <label class="field"><span>DNS</span><input name="dns" placeholder="Comma separated"></label>
+    </div>
+    <div class="card-foot"><button class="btn primary">Apply</button></div>`;
   form.method.value = it.method === "manual" ? "manual" : "auto";
   form.address.value = it.method === "manual" ? (it.addresses || [])[0] || "" : "";
   form.gateway.value = it.method === "manual" ? it.gateway || "" : "";
   form.dns.value = (it.dns || []).join(", ");
+  const sync = () => ["address", "gateway"].forEach((n) => (form[n].disabled = form.method.value !== "manual"));
+  form.method.addEventListener("change", sync);
+  sync();
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const body = {
@@ -554,22 +849,23 @@ function netCard(it) {
     await act(() => api("POST", "/api/network/ipv4", body), "Applying network settings");
     setTimeout(loadNetwork, 5000);
   });
-  div.append(form);
-  return div;
+  card.append(form);
+  return card;
 }
 
 $("#wifi-scan").addEventListener("click", async () => {
   const list = $("#wifi-list");
-  list.textContent = "Scanning…";
+  list.replaceChildren(el("li", "Scanning…", "muted"));
   const nets = await act(() => api("POST", "/api/network/wifi/scan"));
-  list.replaceChildren(...(nets || []).map((n) => {
-    const d = el("div");
-    d.className = "wifi-item";
-    d.append(el("span", (n.active ? "● " : "") + n.ssid), el("span", `${n.signal}% ${n.security || "open"}`));
-    d.addEventListener("click", () => { $("#wifi-ssid").value = n.ssid; $("#wifi-pass").focus(); });
-    return d;
+  if (!nets || !nets.length) return list.replaceChildren(el("li", "No networks found", "muted"));
+  list.replaceChildren(...nets.map((n) => {
+    const li = el("li", null, "clickable");
+    li.append(el("span", n.ssid, "name"));
+    if (n.active) li.append(chip("connected", "accent"));
+    li.append(el("span", `${n.signal}%`, "muted small"), chip(n.security || "open"));
+    li.addEventListener("click", () => { $("#wifi-ssid").value = n.ssid; $("#wifi-pass").focus(); });
+    return li;
   }));
-  if (!nets || !nets.length) list.textContent = "No networks found";
 });
 $("#wifi-connect").addEventListener("click", async () => {
   await act(() => api("POST", "/api/network/wifi/connect", { ssid: $("#wifi-ssid").value, password: $("#wifi-pass").value }), "Connected");
@@ -583,12 +879,11 @@ const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 function fillWeekdays(selected) {
   $("#weekdays").replaceChildren(...DAYS.map((d, i) => {
     const l = el("label");
-    l.className = "inline";
     const c = document.createElement("input");
     c.type = "checkbox";
     c.value = i;
     c.checked = selected.includes(i);
-    l.append(c, " " + d);
+    l.append(c, el("span", d));
     return l;
   }));
 }
@@ -616,15 +911,56 @@ async function loadSystem() {
   if (!s) return;
   const i = s.info;
   const rows = [
-    ["Hostname", i.hostname], ["pikiosk", i.version], ["OS", i.os_version || "—"], ["Hardware", i.model || "—"],
+    ["Hostname", i.hostname], ["Version", i.version], ["OS", i.os_version || "—"], ["Hardware", i.model || "—"],
     ["Addresses", (i.addresses || []).join(", ")], ["Uptime", i.uptime], ["Timezone", i.timezone],
   ];
   $("#sys-info").replaceChildren(...rows.flatMap(([k, v]) => [el("dt", k), el("dd", v || "—")]));
   $("#tz").value = i.timezone || "";
   $("#sys-rollback").hidden = !i.rollback;
-  $("#api-token").value = "•".repeat(16);
+  $("#api-token").value = "•".repeat(24);
   $("#api-token").dataset.token = s.api_token;
+  $("#token-show").textContent = "Show";
 }
+
+function fillOIDC() {
+  const o = config.oidc || {};
+  const f = $("#oidc-form");
+  f.enabled.checked = !!o.enabled;
+  f.issuer.value = o.issuer || "";
+  f.client_id.value = o.client_id || "";
+  f.client_secret.value = o.client_secret || "";
+  f.allowed_groups.value = (o.allowed_groups || []).join(", ");
+  f.button_label.value = o.button_label || "";
+  f.redirect_url.value = o.redirect_url || "";
+  f.redirect_url.placeholder = location.origin + "/api/oidc/callback";
+}
+
+$("#oidc-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = e.target;
+  const body = {
+    enabled: f.enabled.checked,
+    issuer: f.issuer.value.trim(),
+    client_id: f.client_id.value.trim(),
+    client_secret: f.client_secret.value,
+    allowed_groups: f.allowed_groups.value.split(",").map((s) => s.trim()).filter(Boolean),
+    button_label: f.button_label.value.trim(),
+    redirect_url: f.redirect_url.value.trim(),
+  };
+  await act(() => api("PUT", "/api/config/oidc", body), "Single sign-on saved");
+  await loadConfig();
+});
+$("#oidc-copy").addEventListener("click", async () => {
+  const f = $("#oidc-form");
+  const v = f.redirect_url.value.trim() || f.redirect_url.placeholder;
+  try {
+    await navigator.clipboard.writeText(v);
+    toast("Copied " + v);
+  } catch {
+    f.redirect_url.value = v;
+    f.redirect_url.select();
+  }
+});
 
 $("#general-form").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -638,22 +974,27 @@ $("#general-form").addEventListener("submit", async (e) => {
 $("#password-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const f = e.target;
-  await act(() => api("POST", "/api/password", { current: f.current.value, new: f.new.value }), "Password changed");
-  f.reset();
+  const ok = await act(() => api("POST", "/api/password", { current: f.current.value, new: f.new.value }), "Password changed");
+  if (ok) f.reset();
 });
 
 $("#tz-save").addEventListener("click", () => act(() => api("POST", "/api/system/timezone", { timezone: $("#tz").value.trim() }), "Timezone set"));
-$("#token-show").addEventListener("click", () => ($("#api-token").value = $("#api-token").dataset.token || ""));
+$("#token-show").addEventListener("click", (e) => {
+  const t = $("#api-token");
+  const shown = e.target.textContent === "Hide";
+  t.value = shown ? "•".repeat(24) : t.dataset.token || "";
+  e.target.textContent = shown ? "Show" : "Hide";
+});
 $("#token-new").addEventListener("click", async () => {
   if (!confirm("Regenerate the API token? Anything using the old one stops working.")) return;
   const r = await act(() => api("POST", "/api/token"), "Token regenerated");
-  if (r) { $("#api-token").value = r.api_token; $("#api-token").dataset.token = r.api_token; }
+  if (r) { $("#api-token").value = r.api_token; $("#api-token").dataset.token = r.api_token; $("#token-show").textContent = "Hide"; }
 });
 $("#sys-reboot").addEventListener("click", () => confirm("Reboot the kiosk?") && act(() => api("POST", "/api/system/reboot"), "Rebooting"));
 $("#sys-rollback").addEventListener("click", () =>
   confirm("Switch back to the previous system version?") && act(() => api("POST", "/api/system/rollback"), "Rolling back"));
 $("#sys-update").addEventListener("click", async () => {
-  if (!confirm("Download and apply the latest system version? The kiosk may restart its display.")) return;
+  if (!confirm("Download and apply the latest system and pikiosk version? The kiosk may restart its display.")) return;
   await act(() => api("POST", "/api/system/update"), "Update started");
   pollUpdate();
 });
@@ -688,132 +1029,10 @@ async function loadEvents() {
   }
   $("#events").replaceChildren(...(evs || []).slice().reverse().map((e) => {
     const li = el("li");
-    const t = el("time", new Date(e.time).toLocaleTimeString());
-    const ty = el("span", e.type);
-    ty.className = "t";
-    li.append(t, ty, el("span", e.message));
+    li.append(el("time", new Date(e.time).toLocaleTimeString()), el("span", e.type, "t"), el("span", e.message, "m"));
     return li;
   }));
+  if (!evs || !evs.length) $("#events").replaceChildren(el("li", "Nothing yet", "muted"));
 }
-
-// --- rotations ---
-
-$("#rot-start").addEventListener("click", () =>
-  act(() => api("POST", "/api/rotation", { name: $("#ctl-rotation").value }), "Rotation started").then(refreshState));
-$("#rot-resume").addEventListener("click", () => act(() => api("POST", "/api/rotation/resume"), "Rotation resumed").then(refreshState));
-$("#rot-next").addEventListener("click", () => act(() => api("POST", "/api/rotation/next")).then(refreshState));
-$("#rot-stop").addEventListener("click", () => act(() => api("POST", "/api/rotation/stop"), "Rotation stopped").then(refreshState));
-
-function fillRotations() {
-  $("#rotations").replaceChildren();
-  for (const r of config.rotations || []) addRotationCard(r);
-  syncRotationSelects();
-}
-
-function viewOptions(select, value) {
-  select.replaceChildren(...(config.views || []).map((v) => new Option(v.name + (v.disabled ? " (disabled)" : ""), v.name)));
-  if (value) select.value = value;
-}
-
-function addRotationItem(list, item = { view: "", seconds: 30 }) {
-  const li = $("#rotation-item").content.firstElementChild.cloneNode(true);
-  viewOptions($("[data-f=view]", li), item.view);
-  $("[data-f=seconds]", li).value = item.seconds;
-  $("[data-act=del]", li).addEventListener("click", () => li.remove());
-  $("[data-act=up]", li).addEventListener("click", () => li.previousElementSibling && list.insertBefore(li, li.previousElementSibling));
-  list.append(li);
-}
-
-function addRotationCard(r = { name: "", items: [] }) {
-  const card = $("#rotation-card").content.firstElementChild.cloneNode(true);
-  const list = $(".items", card);
-  $("[data-f=name]", card).value = r.name;
-  $("[data-f=name]", card).addEventListener("input", syncRotationSelects);
-  for (const it of r.items) addRotationItem(list, it);
-  $("[data-act=add-item]", card).addEventListener("click", () => addRotationItem(list));
-  $("[data-act=del]", card).addEventListener("click", () => { card.remove(); syncRotationSelects(); });
-  $("[data-act=start]", card).addEventListener("click", () =>
-    act(() => api("POST", "/api/rotation", { name: $("[data-f=name]", card).value }), "Rotation started (save first if changed)"));
-  $("#rotations").append(card);
-}
-
-function readRotations() {
-  return $$("#rotations .rotation").map((card) => ({
-    name: $("[data-f=name]", card).value.trim(),
-    items: $$(".items li", card).map((li) => ({
-      view: $("[data-f=view]", li).value,
-      seconds: Number($("[data-f=seconds]", li).value) || 0,
-    })),
-  }));
-}
-
-function syncRotationSelects() {
-  const names = readRotations().map((r) => r.name).filter(Boolean);
-  const def = $("#rotations-default");
-  const cur = def.value || config.default_rotation;
-  def.replaceChildren(new Option("(none)", ""), ...names.map((n) => new Option(n, n)));
-  def.value = names.includes(cur) ? cur : "";
-  const saved = (config.rotations || []).map((r) => r.name);
-  fillSelect($("#ctl-rotation"), saved, "(no rotations yet)");
-  $("#rot-start").disabled = !saved.length;
-}
-
-$("#rotation-add").addEventListener("click", () => {
-  if (!(config.views || []).length) return toast("Add some views first", true);
-  addRotationCard();
-});
-$("#rotations-save").addEventListener("click", async () => {
-  await act(() => api("PUT", "/api/config/rotations", { rotations: readRotations(), default_rotation: $("#rotations-default").value }), "Rotations saved");
-  await loadConfig();
-});
-
-// --- sounds ---
-
-async function loadSounds() {
-  const list = await act(() => api("GET", "/api/sounds"));
-  $("#sounds-body").replaceChildren(...(list || []).map((snd) => {
-    const tr = el("tr");
-    const name = el("td", snd.name);
-    const info = el("td", (snd.builtin ? "built-in · " : "") + Math.max(1, Math.round(snd.size / 1024)) + " KiB");
-    info.className = "muted";
-    const actions = el("td");
-    const play = el("button", "Play");
-    play.addEventListener("click", () => act(() => api("POST", "/api/sound/play", { name: snd.name })));
-    actions.append(play);
-    if (!snd.builtin) {
-      const del = el("button", "Delete");
-      del.className = "danger";
-      del.addEventListener("click", async () => {
-        if (!confirm(`Delete ${snd.name}?`)) return;
-        await act(() => api("DELETE", "/api/sounds/" + encodeURIComponent(snd.name)), "Deleted");
-        loadSounds();
-      });
-      actions.append(" ", del);
-    }
-    tr.append(name, info, actions);
-    return tr;
-  }));
-  if (!list || !list.length) $("#sounds-body").replaceChildren(el("tr", "No sounds yet"));
-}
-
-$("#sound-upload").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const res = await fetch("/api/sounds", { method: "POST", headers: { "X-Pikiosk": "1" }, body: new FormData(e.target) });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) return toast(data.error || res.statusText, true);
-  toast("Uploaded " + data.name);
-  e.target.reset();
-  loadSounds();
-});
-$("#sound-play").addEventListener("click", () => act(() => api("POST", "/api/sound/play", { path: $("#sound-url").value.trim() })));
-$("#sound-stop").addEventListener("click", () => act(() => api("POST", "/api/sound/stop")));
-$("#volume").addEventListener("change", async (e) => {
-  const v = Number(e.target.value);
-  await act(() => api("POST", "/api/volume", { value: v }), `Volume ${v}%`);
-  if ($("#volume-save").checked) await act(() => api("PUT", "/api/config/audio", { volume: v }));
-});
-$("#volume-save").addEventListener("change", (e) =>
-  act(() => api("PUT", "/api/config/audio", { volume: e.target.checked ? Number($("#volume").value) : -1 }), "Saved"));
 
 boot().catch((e) => toast(e.message, true));
-

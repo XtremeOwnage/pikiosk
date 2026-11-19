@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -377,18 +378,92 @@ func (b *Bridge) publishError(err error) {
 	c.Publish(base+"/error", 1, false, err.Error())
 }
 
+// DiscoveryTopic is where the retained Home Assistant device-discovery
+// message lives.
+func DiscoveryTopic(cfg config.Config) string {
+	return fmt.Sprintf("%s/device/%s/config", cfg.MQTT.DiscoveryPrefix, cfg.DeviceID)
+}
+
 // publishDiscovery sends one Home Assistant device-discovery message
-// describing every entity.
-func (b *Bridge) publishDiscovery(c paho.Client, cfg config.Config) {
+// describing every entity. It does not wait, so it is safe in callbacks.
+func (b *Bridge) publishDiscovery(c paho.Client, cfg config.Config) paho.Token {
 	if !cfg.MQTT.Discovery {
-		return
+		return nil
 	}
 	data, err := json.Marshal(Discovery(cfg, b.version, b.webURL()))
 	if err != nil {
-		return
+		return nil
 	}
-	topic := fmt.Sprintf("%s/device/%s/config", cfg.MQTT.DiscoveryPrefix, cfg.DeviceID)
-	c.Publish(topic, 1, true, data)
+	topic := DiscoveryTopic(cfg)
+	t := c.Publish(topic, 1, true, data)
+	go func() {
+		if !t.WaitTimeout(10*time.Second) || t.Error() != nil {
+			b.log.Warn("discovery publish failed", "topic", topic, "err", t.Error())
+			return
+		}
+		b.log.Info("discovery published", "topic", topic, "bytes", len(data))
+	}()
+	return t
+}
+
+func (b *Bridge) connected() (paho.Client, config.Config, error) {
+	b.mu.Lock()
+	c, conf := b.client, b.conf
+	b.mu.Unlock()
+	if c == nil || !c.IsConnected() {
+		return nil, conf, errors.New("MQTT is not connected")
+	}
+	return c, conf, nil
+}
+
+func wait(t paho.Token) error {
+	if t == nil {
+		return nil
+	}
+	if !t.WaitTimeout(10 * time.Second) {
+		return errors.New("broker did not acknowledge the publish")
+	}
+	return t.Error()
+}
+
+// RepublishDiscovery sends the discovery, state and sound messages again
+// and returns the discovery topic.
+func (b *Bridge) RepublishDiscovery() (string, error) {
+	c, conf, err := b.connected()
+	if err != nil {
+		return "", err
+	}
+	if !conf.MQTT.Discovery {
+		return "", errors.New("Home Assistant discovery is turned off")
+	}
+	if err := wait(c.Publish(conf.MQTT.BaseTopic+"/availability", 1, true, payloadOnline)); err != nil {
+		return "", err
+	}
+	if err := wait(b.publishDiscovery(c, conf)); err != nil {
+		return "", err
+	}
+	b.publishState(b.kiosk.State())
+	b.PublishSounds()
+	return DiscoveryTopic(conf), nil
+}
+
+// ClearRetained deletes this kiosk's retained messages from the broker:
+// discovery (which removes the device from Home Assistant), state, sounds
+// and availability. They come back on the next reconnect or republish.
+func (b *Bridge) ClearRetained() ([]string, error) {
+	c, conf, err := b.connected()
+	if err != nil {
+		return nil, err
+	}
+	base := conf.MQTT.BaseTopic
+	topics := []string{DiscoveryTopic(conf), base + "/state", base + "/sounds", base + "/availability"}
+	for _, t := range topics {
+		if err := wait(c.Publish(t, 1, true, []byte{})); err != nil {
+			return nil, fmt.Errorf("%s: %w", t, err)
+		}
+	}
+	b.log.Info("cleared retained messages", "topics", topics)
+	return topics, nil
 }
 
 func Discovery(cfg config.Config, version, webURL string) map[string]any {

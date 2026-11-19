@@ -58,4 +58,6 @@ Simple topics take the value as the payload:
 
 ## Home Assistant discovery
 
-With discovery on, the kiosk publishes one device config to `<discovery prefix>/device/<device id>/config`. The discovery prefix defaults to `homeassistant`. The config is republished when views, rotations or the sound library change, so the selectors stay current.
+With discovery on, the kiosk publishes one device config to `<discovery prefix>/device/<device id>/config`. The discovery prefix defaults to `homeassistant`. The config is republished on every connect, when Home Assistant sends `online` on `<discovery prefix>/status`, and when views, rotations or the device name change, so the selectors stay current.
+
+The MQTT page in the web UI can republish it on demand, or clear the kiosk's retained messages (discovery, state, sounds, availability); the REST equivalents are `POST /api/mqtt/discovery` and `POST /api/mqtt/clear`. See [Home Assistant](../guides/home-assistant.md#how-discovery-is-published).

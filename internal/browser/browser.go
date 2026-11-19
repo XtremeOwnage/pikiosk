@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -40,17 +41,44 @@ type Page struct {
 	Headers map[string]string
 	CSS     string
 	Zoom    float64
+	// Keep leaves the page loaded in a background tab after another page is
+	// shown, so coming back to it is instant and it stays live.
+	Keep bool
+}
+
+// same reports whether a and b load the same thing; Keep does not count.
+func (a Page) same(b Page) bool {
+	a.Keep, b.Keep = false, false
+	return reflect.DeepEqual(a, b)
+}
+
+// MaxBackgroundTabs bounds the tabs kept loaded behind the visible one.
+const MaxBackgroundTabs = 3
+
+// tab is one Chromium page target with its own DevTools connection.
+type tab struct {
+	id      string
+	conn    *cdp
+	page    Page
+	loaded  bool
+	scripts []string
+	crashed chan struct{}
+	used    time.Time
 }
 
 type Browser struct {
 	opts Options
 	log  *slog.Logger
 
+	// switchMu serialises Show and Preload, which create and swap tabs.
+	switchMu sync.Mutex
+
 	mu       sync.Mutex
-	conn     *cdp
+	front    *tab
+	swapped  chan struct{}
+	bg       []*tab
 	proc     *os.Process
 	page     Page
-	scripts  []string
 	running  bool
 	lastErr  string
 	restarts int
@@ -63,20 +91,21 @@ func New(opts Options, log *slog.Logger) *Browser {
 	if opts.Port == 0 {
 		opts.Port = 9222
 	}
-	return &Browser{opts: opts, log: log.With("component", "browser")}
+	return &Browser{opts: opts, log: log.With("component", "browser"), swapped: make(chan struct{}, 1)}
 }
 
 type Status struct {
-	Running   bool   `json:"running"`
-	Connected bool   `json:"connected"`
-	Restarts  int    `json:"restarts"`
-	LastError string `json:"last_error,omitempty"`
+	Running        bool   `json:"running"`
+	Connected      bool   `json:"connected"`
+	Restarts       int    `json:"restarts"`
+	BackgroundTabs int    `json:"background_tabs"`
+	LastError      string `json:"last_error,omitempty"`
 }
 
 func (b *Browser) Status() Status {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return Status{Running: b.running, Connected: b.conn != nil, Restarts: b.restarts, LastError: b.lastErr}
+	return Status{Running: b.running, Connected: b.front != nil, Restarts: b.restarts, BackgroundTabs: len(b.bg), LastError: b.lastErr}
 }
 
 // Run supervises Chromium until ctx is cancelled.
@@ -129,6 +158,10 @@ func (b *Browser) runOnce(ctx context.Context, wayland string) error {
 		"--disable-breakpad",
 		"--disable-domain-reliability",
 		"--disable-features=Translate,OptimizationHints,MediaRouter,DialMediaRouteProvider,InterestFeedContentSuggestions,AutofillServerCommunication,CertificateTransparencyComponentUpdater",
+		// Background tabs hold preloaded and kept pages; keep them running.
+		"--disable-background-timer-throttling",
+		"--disable-renderer-backgrounding",
+		"--disable-backgrounding-occluded-windows",
 		"--check-for-update-interval=31536000",
 		"--password-store=basic",
 		"--autoplay-policy=no-user-gesture-required",
@@ -164,101 +197,132 @@ func (b *Browser) runOnce(ctx context.Context, wayland string) error {
 	b.mu.Lock()
 	b.running = false
 	b.proc = nil
-	if b.conn != nil {
-		b.conn.Close()
-		b.conn = nil
-	}
 	b.mu.Unlock()
+	b.dropTabs()
 	if err == nil {
 		err = errors.New("exited")
 	}
 	return err
 }
 
-// connectLoop keeps a DevTools connection to the current page target and
-// replays the desired page whenever a new connection is made.
+// dropTabs forgets every tab and closes their connections.
+func (b *Browser) dropTabs() {
+	b.mu.Lock()
+	tabs := b.bg
+	if b.front != nil {
+		tabs = append(tabs, b.front)
+	}
+	b.front, b.bg = nil, nil
+	b.mu.Unlock()
+	for _, t := range tabs {
+		t.conn.Close()
+	}
+}
+
+// attach opens a DevTools connection to a page target.
+func (b *Browser) attach(ctx context.Context, id, wsURL string) (*tab, error) {
+	t := &tab{id: id, crashed: make(chan struct{}, 1), used: time.Now()}
+	ready := make(chan struct{})
+	conn, err := dial(ctx, wsURL, func(method string, params json.RawMessage) {
+		switch method {
+		case "Inspector.targetCrashed":
+			select {
+			case t.crashed <- struct{}{}:
+			default:
+			}
+		case "Fetch.requestPaused":
+			// Calls block until readLoop delivers the reply.
+			go func() {
+				<-ready
+				b.continueRequest(ctx, t, params)
+			}()
+		}
+	})
+	if err != nil {
+		return nil, err
+	}
+	t.conn = conn
+	close(ready)
+	// Scripts added for new documents only run with the Page domain on.
+	if err := conn.Call(ctx, "Page.enable", nil, nil); err != nil {
+		conn.Close()
+		return nil, err
+	}
+	return t, nil
+}
+
+// connectLoop keeps a DevTools connection to the visible page and replays
+// the desired page whenever a new connection is made.
 func (b *Browser) connectLoop(ctx context.Context) {
 	for ctx.Err() == nil {
-		wsURL, err := findPage(ctx, b.opts.Port)
+		id, wsURL, err := findPage(ctx, b.opts.Port)
 		if err != nil {
 			sleep(ctx, 500*time.Millisecond)
 			continue
 		}
-		crashed := make(chan struct{}, 1)
-		var conn *cdp
-		ready := make(chan struct{})
-		conn, err = dial(ctx, wsURL, func(method string, params json.RawMessage) {
-			switch method {
-			case "Inspector.targetCrashed":
-				select {
-				case crashed <- struct{}{}:
-				default:
-				}
-			case "Fetch.requestPaused":
-				// Calls block until readLoop delivers the reply.
-				go func() {
-					<-ready
-					b.continueRequest(ctx, conn, params)
-				}()
-			}
-		})
+		t, err := b.attach(ctx, id, wsURL)
 		if err != nil {
 			sleep(ctx, time.Second)
 			continue
 		}
 		b.mu.Lock()
-		b.conn = conn
-		b.scripts = nil
+		b.front = t
 		page := b.page
 		b.lastErr = ""
 		b.mu.Unlock()
-		close(ready)
 		b.log.Info("devtools connected")
-		// Scripts added for new documents only run with the Page domain on.
-		if err := conn.Call(ctx, "Page.enable", nil, nil); err != nil {
-			b.log.Warn("enable page domain", "err", err)
-		}
+		b.closeOthers(ctx, t.id)
 
 		if page.URL != "" {
-			if err := b.apply(ctx, conn, page); err != nil {
+			if err := b.apply(ctx, t, page); err != nil {
 				b.log.Warn("restore page failed", "err", err)
 			}
 		}
-		b.watch(ctx, conn, crashed)
-		b.mu.Lock()
-		if b.conn == conn {
-			b.conn = nil
-		}
-		b.mu.Unlock()
-		conn.Close()
+		b.watch(ctx, t)
+		b.dropTabs()
 		sleep(ctx, 500*time.Millisecond)
 	}
 }
 
-// watch returns when the connection drops. It reloads a crashed page and
-// restarts Chromium when the page stops answering.
-func (b *Browser) watch(ctx context.Context, conn *cdp, crashed <-chan struct{}) {
+// watch returns when the visible tab's connection drops. It reloads a
+// crashed page, drops crashed background tabs, and restarts Chromium when
+// the page stops answering.
+func (b *Browser) watch(ctx context.Context, first *tab) {
 	tick := time.NewTicker(20 * time.Second)
 	defer tick.Stop()
 	failures := 0
 	for {
+		b.mu.Lock()
+		t := b.front
+		b.mu.Unlock()
+		if t == nil {
+			t = first
+		}
 		select {
-		case <-conn.Done():
-			return
+		case <-t.conn.Done():
+			b.mu.Lock()
+			still := b.front == t
+			b.mu.Unlock()
+			if still {
+				return
+			}
 		case <-ctx.Done():
 			return
-		case <-crashed:
+		case <-b.swapped:
+			continue
+		case <-t.crashed:
 			b.log.Warn("page crashed, reloading")
 			b.setErr("page crashed")
 			b.mu.Lock()
 			page := b.page
 			b.mu.Unlock()
 			if page.URL != "" {
-				_ = b.apply(ctx, conn, page)
+				_ = b.apply(ctx, t, page)
 			}
 		case <-tick.C:
+			b.dropCrashedBackground()
 			pctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-			err := conn.Call(pctx, "Runtime.evaluate", map[string]any{"expression": "1", "returnByValue": true}, nil)
+			err := t.conn.Call(pctx, "Runtime.evaluate", map[string]any{"expression": "1", "returnByValue": true}, nil)
 			cancel()
 			if err == nil {
 				failures = 0
@@ -275,22 +339,236 @@ func (b *Browser) watch(ctx context.Context, conn *cdp, crashed <-chan struct{})
 	}
 }
 
-// Show navigates to page and remembers it so it is restored after a crash.
-func (b *Browser) Show(ctx context.Context, page Page) error {
+func (b *Browser) dropCrashedBackground() {
 	b.mu.Lock()
-	b.page = page
-	conn := b.conn
-	b.mu.Unlock()
-	if conn == nil {
-		return nil // applied when the browser connects
+	var keep, drop []*tab
+	for _, t := range b.bg {
+		select {
+		case <-t.crashed:
+			drop = append(drop, t)
+			continue
+		case <-t.conn.Done():
+			drop = append(drop, t)
+			continue
+		default:
+		}
+		keep = append(keep, t)
 	}
-	return b.apply(ctx, conn, page)
+	b.bg = keep
+	b.mu.Unlock()
+	for _, t := range drop {
+		b.log.Warn("background tab lost", "url", t.page.URL)
+		b.closeTab(context.Background(), t)
+	}
 }
 
-func (b *Browser) apply(ctx context.Context, conn *cdp, page Page) error {
+// Show makes page visible. A page already loaded in a background tab is
+// brought to the front without reloading; the page that was showing stays
+// loaded behind it if it is kept. Showing the page that is already visible
+// does nothing.
+func (b *Browser) Show(ctx context.Context, page Page) error {
+	b.switchMu.Lock()
+	defer b.switchMu.Unlock()
 	b.mu.Lock()
-	old := b.scripts
-	b.scripts = nil
+	b.page = page
+	front := b.front
+	if front == nil {
+		b.mu.Unlock()
+		return nil // applied when the browser connects
+	}
+	if front.loaded && front.page.same(page) {
+		front.page.Keep = page.Keep
+		front.used = time.Now()
+		b.mu.Unlock()
+		return nil
+	}
+	var next *tab
+	for i, t := range b.bg {
+		if t.page.same(page) {
+			next = t
+			b.bg = append(b.bg[:i:i], b.bg[i+1:]...)
+			break
+		}
+	}
+	b.mu.Unlock()
+
+	if next == nil && !front.page.Keep {
+		return b.apply(ctx, front, page)
+	}
+	if next == nil {
+		// Keep the current page loaded: open the new one in another tab.
+		t, err := b.newTab(ctx)
+		if err != nil {
+			b.log.Warn("new tab failed; navigating in place", "err", err)
+			return b.apply(ctx, front, page)
+		}
+		if err := b.apply(ctx, t, page); err != nil {
+			b.closeTab(ctx, t)
+			return err
+		}
+		next = t
+	}
+	next.page.Keep = page.Keep
+	if err := b.activate(ctx, next); err != nil {
+		b.closeTab(ctx, next)
+		b.log.Warn("activate tab failed; navigating in place", "err", err)
+		return b.apply(ctx, front, page)
+	}
+	next.used = time.Now()
+	b.mu.Lock()
+	b.front = next
+	select {
+	case b.swapped <- struct{}{}:
+	default:
+	}
+	if front.page.Keep {
+		front.used = time.Now()
+		b.bg = append(b.bg, front)
+		front = nil
+	}
+	evict := b.evictLocked()
+	b.mu.Unlock()
+	if front != nil {
+		b.closeTab(ctx, front)
+	}
+	for _, t := range evict {
+		b.closeTab(ctx, t)
+	}
+	return nil
+}
+
+// Preload loads page in a background tab so a later Show is instant. Only
+// one page that is not kept is preloaded at a time.
+func (b *Browser) Preload(ctx context.Context, page Page) error {
+	b.switchMu.Lock()
+	defer b.switchMu.Unlock()
+	b.mu.Lock()
+	if b.front == nil || b.front.page.same(page) {
+		b.mu.Unlock()
+		return nil
+	}
+	for _, t := range b.bg {
+		if t.page.same(page) {
+			t.used = time.Now()
+			t.page.Keep = t.page.Keep || page.Keep
+			b.mu.Unlock()
+			return nil
+		}
+	}
+	var stale, keep []*tab
+	for _, t := range b.bg {
+		if !t.page.Keep && !page.Keep {
+			stale = append(stale, t)
+		} else {
+			keep = append(keep, t)
+		}
+	}
+	b.bg = keep
+	b.mu.Unlock()
+	for _, t := range stale {
+		b.closeTab(ctx, t)
+	}
+
+	t, err := b.newTab(ctx)
+	if err != nil {
+		return err
+	}
+	if err := b.apply(ctx, t, page); err != nil {
+		b.closeTab(ctx, t)
+		return err
+	}
+	b.mu.Lock()
+	b.bg = append(b.bg, t)
+	evict := b.evictLocked()
+	b.mu.Unlock()
+	for _, e := range evict {
+		b.closeTab(ctx, e)
+	}
+	b.log.Debug("preloaded", "url", page.URL)
+	return nil
+}
+
+// evictLocked trims background tabs to MaxBackgroundTabs, least recently
+// used first, preferring pages that are not kept.
+func (b *Browser) evictLocked() []*tab {
+	var out []*tab
+	for len(b.bg) > MaxBackgroundTabs {
+		victim := -1
+		for i, t := range b.bg {
+			if victim < 0 || (!t.page.Keep && b.bg[victim].page.Keep) ||
+				(t.page.Keep == b.bg[victim].page.Keep && t.used.Before(b.bg[victim].used)) {
+				victim = i
+			}
+		}
+		out = append(out, b.bg[victim])
+		b.bg = append(b.bg[:victim:victim], b.bg[victim+1:]...)
+	}
+	return out
+}
+
+// newTab opens a page target in the background.
+func (b *Browser) newTab(ctx context.Context) (*tab, error) {
+	var res struct {
+		TargetID string `json:"targetId"`
+	}
+	if err := b.browserCall(ctx, "Target.createTarget", map[string]any{"url": "about:blank", "background": true}, &res); err != nil {
+		return nil, err
+	}
+	ws := fmt.Sprintf("ws://127.0.0.1:%d/devtools/page/%s", b.opts.Port, res.TargetID)
+	t, err := b.attach(ctx, res.TargetID, ws)
+	if err != nil {
+		_ = b.browserCall(ctx, "Target.closeTarget", map[string]any{"targetId": res.TargetID}, nil)
+		return nil, err
+	}
+	return t, nil
+}
+
+func (b *Browser) activate(ctx context.Context, t *tab) error {
+	return b.browserCall(ctx, "Target.activateTarget", map[string]any{"targetId": t.id}, nil)
+}
+
+func (b *Browser) closeTab(ctx context.Context, t *tab) {
+	t.conn.Close()
+	if t.id != "" {
+		_ = b.browserCall(ctx, "Target.closeTarget", map[string]any{"targetId": t.id}, nil)
+	}
+}
+
+// closeOthers closes page targets left over from an earlier connection, so
+// the attached tab is the only one and therefore the visible one.
+func (b *Browser) closeOthers(ctx context.Context, keepID string) {
+	ids, err := pageIDs(ctx, b.opts.Port)
+	if err != nil {
+		return
+	}
+	for _, id := range ids {
+		if id != keepID && id != "" {
+			_ = b.browserCall(ctx, "Target.closeTarget", map[string]any{"targetId": id}, nil)
+		}
+	}
+}
+
+// browserCall runs one command on the browser-level DevTools endpoint.
+func (b *Browser) browserCall(ctx context.Context, method string, params, out any) error {
+	ws, err := browserEndpoint(ctx, b.opts.Port)
+	if err != nil {
+		return err
+	}
+	conn, err := dial(ctx, ws, nil)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	return conn.Call(ctx, method, params, out)
+}
+
+func (b *Browser) apply(ctx context.Context, t *tab, page Page) error {
+	conn := t.conn
+	b.mu.Lock()
+	old := t.scripts
+	t.scripts = nil
+	t.page = page
+	t.loaded = false
 	b.mu.Unlock()
 	for _, id := range old {
 		_ = conn.Call(ctx, "Page.removeScriptToEvaluateOnNewDocument", map[string]any{"identifier": id}, nil)
@@ -339,7 +617,7 @@ func (b *Browser) apply(ctx context.Context, conn *cdp, page Page) error {
 		ids = append(ids, res.Identifier)
 	}
 	b.mu.Lock()
-	b.scripts = ids
+	t.scripts = ids
 	b.mu.Unlock()
 
 	var res struct {
@@ -351,12 +629,15 @@ func (b *Browser) apply(ctx context.Context, conn *cdp, page Page) error {
 	if res.ErrorText != "" {
 		return fmt.Errorf("navigate %s: %s", page.URL, res.ErrorText)
 	}
+	b.mu.Lock()
+	t.loaded = true
+	b.mu.Unlock()
 	return nil
 }
 
-// continueRequest adds the page's headers to a paused request. Fetch only
+// continueRequest adds the tab's headers to a paused request. Fetch only
 // pauses requests to the page's origin, so credentials stay there.
-func (b *Browser) continueRequest(ctx context.Context, conn *cdp, params json.RawMessage) {
+func (b *Browser) continueRequest(ctx context.Context, t *tab, params json.RawMessage) {
 	var ev struct {
 		RequestID string `json:"requestId"`
 		Request   struct {
@@ -367,7 +648,7 @@ func (b *Browser) continueRequest(ctx context.Context, conn *cdp, params json.Ra
 		return
 	}
 	b.mu.Lock()
-	extra := b.page.Headers
+	extra := t.page.Headers
 	b.mu.Unlock()
 	merged := map[string]string{}
 	for k, v := range ev.Request.Headers {
@@ -380,7 +661,7 @@ func (b *Browser) continueRequest(ctx context.Context, conn *cdp, params json.Ra
 	for k, v := range merged {
 		hdrs = append(hdrs, map[string]string{"name": k, "value": v})
 	}
-	if err := conn.Call(ctx, "Fetch.continueRequest", map[string]any{"requestId": ev.RequestID, "headers": hdrs}, nil); err != nil {
+	if err := t.conn.Call(ctx, "Fetch.continueRequest", map[string]any{"requestId": ev.RequestID, "headers": hdrs}, nil); err != nil {
 		b.log.Debug("continue request", "err", err)
 	}
 }
@@ -523,6 +804,16 @@ func (b *Browser) ClearData(ctx context.Context) error {
 	if err := conn.Call(ctx, "Network.clearBrowserCookies", nil, nil); err != nil {
 		return err
 	}
+	// Background tabs still hold the old sessions in memory.
+	b.switchMu.Lock()
+	b.mu.Lock()
+	bg := b.bg
+	b.bg = nil
+	b.mu.Unlock()
+	for _, t := range bg {
+		b.closeTab(ctx, t)
+	}
+	b.switchMu.Unlock()
 	return conn.Call(ctx, "Storage.clearDataForOrigin", map[string]any{"origin": "*", "storageTypes": "all"}, nil)
 }
 
@@ -542,13 +833,31 @@ func (b *Browser) CurrentURL(ctx context.Context) (string, error) {
 	return res.Result.Value, nil
 }
 
+// connection returns the visible tab's DevTools connection.
 func (b *Browser) connection() (*cdp, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if b.conn == nil {
+	if b.front == nil {
 		return nil, errors.New("browser not connected")
 	}
-	return b.conn, nil
+	return b.front.conn, nil
+}
+
+// Title returns the visible page's title.
+func (b *Browser) Title(ctx context.Context) (string, error) {
+	conn, err := b.connection()
+	if err != nil {
+		return "", err
+	}
+	var res struct {
+		Result struct {
+			Value string `json:"value"`
+		} `json:"result"`
+	}
+	if err := conn.Call(ctx, "Runtime.evaluate", map[string]any{"expression": "document.title", "returnByValue": true}, &res); err != nil {
+		return "", err
+	}
+	return res.Result.Value, nil
 }
 
 func (b *Browser) setErr(s string) {

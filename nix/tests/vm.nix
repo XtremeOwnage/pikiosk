@@ -80,12 +80,13 @@ pkgs.testers.runNixOSTest {
             cmd += " -d " + json.dumps(json.dumps(body))
         return kiosk.succeed(cmd)
 
+    # The visible tab's title; preloaded pages sit in background tabs.
     def titles():
-        return kiosk.succeed("curl -s http://127.0.0.1:9222/json/list")
+        return kiosk.succeed(f"{C} http://127.0.0.1/api/state | jq -r .browser.title")
 
     def wait_title(text, timeout=60):
         try:
-            kiosk.wait_until_succeeds(f"curl -s http://127.0.0.1:9222/json/list | grep -q '{text}'", timeout=timeout)
+            kiosk.wait_until_succeeds(f"{C} http://127.0.0.1/api/state | jq -r .browser.title | grep -q '{text}'", timeout=timeout)
         except Exception:
             print("page targets:", titles())
             raise
@@ -232,7 +233,7 @@ pkgs.testers.runNixOSTest {
         kiosk.sleep(5)
         assert "token=secret-token" in titles(), "rotation did not pause"
         assert json.loads(api("GET", "/api/state"))["state"]["rotation_active"]
-        kiosk.wait_until_succeeds("curl -s http://127.0.0.1:9222/json/list | grep -qE 'pikiosk test page|second page'", timeout=15)
+        kiosk.wait_until_succeeds(f"{C} http://127.0.0.1/api/state | jq -r .browser.title | grep -qE 'pikiosk test page|second page'", timeout=15)
         # A permanent view stops it; resume picks it back up.
         api("POST", "/api/view", {"name": "ha"})
         assert not json.loads(api("GET", "/api/state"))["state"]["rotation_active"]
@@ -254,6 +255,64 @@ pkgs.testers.runNixOSTest {
         api("POST", "/api/view/enable", {"name": "one"})
         api("POST", "/api/view", {"name": "one"})
         wait_title("pikiosk test page")
+
+    with subtest("rotation skips a disabled step"):
+        api("PUT", "/api/config/rotations", {
+            "rotations": [{"name": "loop", "items": [{"view": "one", "seconds": 4, "disabled": True}, {"view": "two", "seconds": 4}]}],
+            "default_rotation": "",
+        })
+        api("POST", "/api/rotation", {"name": "loop"})
+        wait_title("second page", timeout=10)
+        kiosk.sleep(6)
+        assert "pikiosk test page" not in titles(), "rotation showed a disabled step"
+        api("POST", "/api/rotation/stop")
+        api("POST", "/api/view", {"name": "one"})
+        wait_title("pikiosk test page")
+
+    with subtest("rotation preloads the next page in a background tab"):
+        api("PUT", "/api/config/rotations", {
+            "rotations": [{"name": "loop", "items": [{"view": "one", "seconds": 9}, {"view": "two", "seconds": 9}]}],
+            "default_rotation": "",
+        })
+        api("POST", "/api/rotation", {"name": "loop"})
+        wait_title("pikiosk test page", timeout=10)
+        kiosk.wait_until_succeeds(f"{C} http://127.0.0.1/api/state | jq -e '.browser.background_tabs == 1'", timeout=10)
+        kiosk.succeed("curl -s http://127.0.0.1:9222/json/list | grep -q 'second page'")
+        assert "pikiosk test page" in titles(), "preloaded page became visible early"
+        wait_title("second page", timeout=12)
+        api("POST", "/api/rotation/stop")
+
+    with subtest("a kept view stays loaded behind other views"):
+        cfg = json.loads(api("GET", "/api/config"))
+        kept = [dict(v, keep_loaded=True) if v["name"] == "two" else v for v in cfg["views"]]
+        api("PUT", "/api/config/views", {"views": kept, "default_view": cfg["default_view"]})
+        api("POST", "/api/view", {"name": "two"})
+        wait_title("second page")
+        api("POST", "/api/view", {"name": "one"})
+        wait_title("pikiosk test page")
+        st = json.loads(api("GET", "/api/state"))["browser"]
+        assert st["background_tabs"] >= 1, st
+        kiosk.succeed("curl -s http://127.0.0.1:9222/json/list | grep -q 'second page'")
+        api("PUT", "/api/config/views", {"views": cfg["views"], "default_view": cfg["default_view"]})
+
+    with subtest("renaming a view updates its rotations"):
+        cfg = json.loads(api("GET", "/api/config"))
+        renamed = [dict(v, name="uno") if v["name"] == "one" else v for v in cfg["views"]]
+        api("PUT", "/api/config/views", {"views": renamed, "default_view": cfg["default_view"], "renames": {"one": "uno"}})
+        rot = json.loads(api("GET", "/api/config"))["rotations"][0]
+        assert rot["items"][0]["view"] == "uno", rot
+        back = [dict(v, name="one") if v["name"] == "uno" else v for v in json.loads(api("GET", "/api/config"))["views"]]
+        api("PUT", "/api/config/views", {"views": back, "default_view": cfg["default_view"], "renames": {"uno": "one"}})
+        assert json.loads(api("GET", "/api/config"))["default_view"] == cfg["default_view"]
+
+    with subtest("discovery can be republished and cleared"):
+        topic = json.loads(api("POST", "/api/mqtt/discovery"))["topic"]
+        assert topic.startswith("homeassistant/device/") and topic.endswith("/config"), topic
+        cleared = json.loads(api("POST", "/api/mqtt/clear"))["topics"]
+        assert topic in cleared and "pikiosk/test/state" in cleared, cleared
+        kiosk.fail(f"mosquitto_sub -h 127.0.0.1 -t {topic} -C 1 -W 3")
+        api("POST", "/api/mqtt/discovery")
+        kiosk.succeed(f"mosquitto_sub -h 127.0.0.1 -t {topic} -C 1 -W 5")
 
     with subtest("sounds: library, playback and activity events over MQTT"):
         sounds = json.loads(kiosk.succeed("mosquitto_sub -h 127.0.0.1 -t pikiosk/test/sounds -C 1 -W 10"))

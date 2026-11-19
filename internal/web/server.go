@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -50,17 +51,23 @@ type Server struct {
 	Log     *slog.Logger
 
 	mu       sync.Mutex
-	sessions map[string]time.Time
+	sessions map[string]session
 	failures map[string][]time.Time
+	oidc     oidcState
+}
+
+type session struct {
+	exp  time.Time
+	user string
 }
 
 func (s *Server) Handler() http.Handler {
-	s.sessions = map[string]time.Time{}
+	s.sessions = map[string]session{}
 	s.failures = map[string][]time.Time{}
 
 	mux := http.NewServeMux()
 	sub, _ := fs.Sub(static, "static")
-	mux.Handle("GET /", http.FileServerFS(sub))
+	mux.Handle("GET /", revalidate(sub, http.FileServerFS(sub)))
 	mux.HandleFunc("GET /api.html", serveAPIDocs)
 
 	// Open endpoints.
@@ -68,6 +75,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/setup", s.setup)
 	mux.HandleFunc("POST /api/login", s.login)
 	mux.HandleFunc("POST /api/logout", s.logout)
+	mux.HandleFunc("GET /api/oidc/login", s.oidcLogin)
+	mux.HandleFunc("GET /api/oidc/callback", s.oidcCallback)
 	mux.HandleFunc("POST /api/activity", s.activity)
 	mux.HandleFunc("GET /api/welcome", s.welcome)
 
@@ -106,8 +115,11 @@ func (s *Server) Handler() http.Handler {
 	api("PUT /api/config/audio", s.putAudio)
 	api("PUT /api/config/cast", s.putCast)
 	api("PUT /api/config/mqtt", s.putMQTT)
+	api("POST /api/mqtt/discovery", s.republishDiscovery)
+	api("POST /api/mqtt/clear", s.clearRetained)
 	api("PUT /api/config/display", s.putDisplay)
 	api("PUT /api/config/sleep", s.putSleep)
+	api("PUT /api/config/oidc", s.putOIDC)
 	api("POST /api/password", s.changePassword)
 	api("POST /api/token", s.regenerateToken)
 
@@ -139,22 +151,30 @@ func securityHeaders(h http.Handler) http.Handler {
 // --- auth ---
 
 func (s *Server) authorized(r *http.Request) bool {
+	_, ok := s.user(r)
+	return ok
+}
+
+// user returns who made the request: the session's user, "admin" for a
+// password session, or "api" for the API token.
+func (s *Server) user(r *http.Request) (string, bool) {
 	cfg := s.Config.Get()
 	if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") && cfg.APIToken != "" {
-		return subtle.ConstantTimeCompare([]byte(strings.TrimPrefix(h, "Bearer ")), []byte(cfg.APIToken)) == 1
+		ok := subtle.ConstantTimeCompare([]byte(strings.TrimPrefix(h, "Bearer ")), []byte(cfg.APIToken)) == 1
+		return "api", ok
 	}
 	c, err := r.Cookie(sessionCookie)
 	if err != nil {
-		return false
+		return "", false
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	exp, ok := s.sessions[c.Value]
-	if !ok || time.Now().After(exp) {
+	ss, ok := s.sessions[c.Value]
+	if !ok || time.Now().After(ss.exp) {
 		delete(s.sessions, c.Value)
-		return false
+		return "", false
 	}
-	return true
+	return ss.user, true
 }
 
 func (s *Server) requireAuth(h http.HandlerFunc) http.Handler {
@@ -177,11 +197,19 @@ func (s *Server) requireAuth(h http.HandlerFunc) http.Handler {
 
 func (s *Server) authStatus(w http.ResponseWriter, r *http.Request) {
 	cfg := s.Config.Get()
-	writeJSON(w, map[string]any{
+	user, ok := s.user(r)
+	out := map[string]any{
 		"setup_required": cfg.PasswordHash == "",
-		"authenticated":  s.authorized(r),
+		"authenticated":  ok,
 		"device_name":    cfg.DeviceName,
-	})
+	}
+	if ok {
+		out["user"] = user
+	}
+	if cfg.OIDC.Enabled {
+		out["oidc"] = map[string]string{"label": cmpOr(cfg.OIDC.ButtonLabel, "Sign in with SSO")}
+	}
+	writeJSON(w, out)
 }
 
 func (s *Server) setup(w http.ResponseWriter, r *http.Request) {
@@ -211,7 +239,7 @@ func (s *Server) setup(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusConflict, err)
 		return
 	}
-	s.newSession(w)
+	s.newSession(w, "admin")
 	writeJSON(w, map[string]bool{"ok": true})
 }
 
@@ -233,7 +261,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnauthorized, errors.New("wrong password"))
 		return
 	}
-	s.newSession(w)
+	s.newSession(w, "admin")
 	writeJSON(w, map[string]bool{"ok": true})
 }
 
@@ -247,16 +275,16 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]bool{"ok": true})
 }
 
-func (s *Server) newSession(w http.ResponseWriter) {
+func (s *Server) newSession(w http.ResponseWriter, user string) {
 	tok := config.RandomToken()
 	s.mu.Lock()
 	now := time.Now()
-	for k, exp := range s.sessions {
-		if now.After(exp) {
+	for k, ss := range s.sessions {
+		if now.After(ss.exp) {
 			delete(s.sessions, k)
 		}
 	}
-	s.sessions[tok] = now.Add(sessionTTL)
+	s.sessions[tok] = session{exp: now.Add(sessionTTL), user: user}
 	s.mu.Unlock()
 	http.SetCookie(w, &http.Cookie{
 		Name: sessionCookie, Value: tok, Path: "/", HttpOnly: true,
@@ -317,9 +345,16 @@ func (s *Server) welcome(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) getState(w http.ResponseWriter, r *http.Request) {
 	url, playing := s.Player.Playing()
+	bs := struct {
+		browser.Status
+		Title string `json:"title,omitempty"`
+	}{Status: s.Browser.Status()}
+	tctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	bs.Title, _ = s.Browser.Title(tctx)
+	cancel()
 	writeJSON(w, map[string]any{
 		"state":   s.Kiosk.State(),
-		"browser": s.Browser.Status(),
+		"browser": bs,
 		"player":  map[string]any{"playing": playing, "url": player.Redact(url), "last_error": s.Player.LastError()},
 		"mqtt":    s.MQTT.Status(),
 		"cast":    s.Cast.Status(),
@@ -466,6 +501,9 @@ func (s *Server) getConfig(w http.ResponseWriter, r *http.Request) {
 	if c.MQTT.Password != "" {
 		c.MQTT.Password = redacted
 	}
+	if c.OIDC.ClientSecret != "" {
+		c.OIDC.ClientSecret = redacted
+	}
 	for i := range c.Views {
 		redactView(&c.Views[i])
 	}
@@ -540,15 +578,41 @@ func (s *Server) putViews(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Views       []config.View `json:"views"`
 		DefaultView string        `json:"default_view"`
+		// Renames maps old view names to new ones; rotations follow them.
+		Renames map[string]string `json:"renames,omitempty"`
 	}
 	if !decode(w, r, &body) {
 		return
 	}
 	s.update(w, func(c *config.Config) error {
 		// A redacted secret means "unchanged"; match it to the old view by name.
+		renamedFrom := map[string]string{}
+		for old, nu := range body.Renames {
+			renamedFrom[nu] = old
+		}
 		for i := range body.Views {
-			old, _ := c.View(body.Views[i].Name)
+			name := body.Views[i].Name
+			if old, ok := renamedFrom[name]; ok {
+				name = old
+			}
+			old, _ := c.View(name)
 			unredactView(&body.Views[i], old)
+		}
+		// Copy before editing: the slices are shared with the live config.
+		rots := make([]config.Rotation, len(c.Rotations))
+		for ri, rot := range c.Rotations {
+			rots[ri] = config.Rotation{Name: rot.Name, Items: slices.Clone(rot.Items)}
+		}
+		c.Rotations = rots
+		for ri := range c.Rotations {
+			for ii, it := range c.Rotations[ri].Items {
+				if nu, ok := body.Renames[it.View]; ok {
+					c.Rotations[ri].Items[ii].View = nu
+				}
+			}
+		}
+		if nu, ok := body.Renames[c.DefaultView]; ok && body.DefaultView == c.DefaultView {
+			body.DefaultView = nu
 		}
 		c.Views = body.Views
 		c.DefaultView = body.DefaultView
@@ -604,6 +668,24 @@ func (s *Server) putMQTT(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) republishDiscovery(w http.ResponseWriter, r *http.Request) {
+	topic, err := s.MQTT.RepublishDiscovery()
+	if err != nil {
+		writeErr(w, http.StatusConflict, err)
+		return
+	}
+	writeJSON(w, map[string]string{"topic": topic})
+}
+
+func (s *Server) clearRetained(w http.ResponseWriter, r *http.Request) {
+	topics, err := s.MQTT.ClearRetained()
+	if err != nil {
+		writeErr(w, http.StatusConflict, err)
+		return
+	}
+	writeJSON(w, map[string]any{"topics": topics})
+}
+
 func (s *Server) putDisplay(w http.ResponseWriter, r *http.Request) {
 	var d config.Display
 	if !decode(w, r, &d) {
@@ -642,13 +724,13 @@ func (s *Server) changePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.mu.Lock()
-	s.sessions = map[string]time.Time{}
+	s.sessions = map[string]session{}
 	s.mu.Unlock()
 	if err := s.Config.Update(func(c *config.Config) error { c.PasswordHash = string(hash); return nil }); err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	s.newSession(w)
+	s.newSession(w, "admin")
 	writeJSON(w, map[string]bool{"ok": true})
 }
 

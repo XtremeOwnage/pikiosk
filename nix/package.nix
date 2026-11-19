@@ -9,7 +9,7 @@ buildGoModule {
     fileset = lib.fileset.unions [ ../go.mod ../go.sum ../cmd ../internal ];
   };
 
-  vendorHash = "sha256-9kGxIPQWKHZMHS/9DnFFA/tFnQS96oEIoKUd2J6zYSc=";
+  vendorHash = "sha256-GIw5+ExIR5jyV4eO0y13wXQs0doWxBijRNvDiU9eH2I=";
   subPackages = [ "cmd/kioskd" ];
   ldflags = [ "-s" "-w" "-X main.version=${version}" ];
 

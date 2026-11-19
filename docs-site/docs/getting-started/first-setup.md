@@ -31,7 +31,7 @@ The first visit asks for an admin password of at least 8 characters. It protects
 
 ## A typical setup
 
-1. **Views**: add a Home Assistant dashboard and a camera stream. Under *Customize*, give the dashboard a long-lived access token.
+1. **Views**: add a Home Assistant dashboard and a camera stream. Under **Configure**, give the dashboard a long-lived access token.
 2. **Views**: choose a *Default view*. It shows at boot and whenever nothing else is.
 3. **MQTT**: enter your broker. With discovery on, Home Assistant adds a device for the kiosk.
 4. **Display & sleep**: set the screen to turn off at night.

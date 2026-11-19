@@ -8,268 +8,372 @@
 <script src="app.js" defer></script>
 </head>
 <body>
+<svg xmlns="http://www.w3.org/2000/svg" hidden>
+  <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/></symbol>
+  <symbol id="i-repeat" viewBox="0 0 24 24"><path d="m17 1 4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="m7 23-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></symbol>
+  <symbol id="i-speaker" viewBox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></symbol>
+  <symbol id="i-radio" viewBox="0 0 24 24"><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8a6 6 0 0 1 0 8.5M7.8 16.2a6 6 0 0 1 0-8.5M19.1 4.9a10 10 0 0 1 0 14.2M4.9 19.1a10 10 0 0 1 0-14.2"/></symbol>
+  <symbol id="i-wifi" viewBox="0 0 24 24"><path d="M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0M2 9a15 15 0 0 1 20 0"/><path d="M12 20h.01"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+  <symbol id="i-cog" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="m6 4 14 8-14 8z"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="m18 15-6-6-6 6"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V2H6.5A2.5 2.5 0 0 0 4 4.5z"/><path d="M4 19.5V22h16"/></symbol>
+  <symbol id="i-logout" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 2 3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.5 9a9 9 0 0 1 14.8-3.4L23 10M1 14l4.7 4.4A9 9 0 0 0 20.5 15"/></symbol>
+  <symbol id="i-power" viewBox="0 0 24 24"><path d="M18.4 6.6a9 9 0 1 1-12.8 0M12 2v10"/></symbol>
+  <symbol id="i-skip" viewBox="0 0 24 24"><path d="m5 4 10 8-10 8z"/><path d="M19 5v14"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="1"/></symbol>
+  <symbol id="i-cast" viewBox="0 0 24 24"><path d="M2 16.1A5 5 0 0 1 5.9 20M2 12.05A9 9 0 0 1 9.95 20M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6"/><path d="M2 20h.01"/></symbol>
+</svg>
+
 <div id="auth" class="auth" hidden>
-  <form id="auth-form" class="card">
-    <h1 id="auth-title">pikiosk</h1>
+  <div class="auth-box">
+    <div class="brand big"><span class="logo"><svg><use href="#i-monitor"/></svg></span><span id="auth-title">pikiosk</span></div>
     <p id="auth-hint" class="muted"></p>
-    <input id="auth-password" type="password" autocomplete="current-password" placeholder="Password" required minlength="8">
-    <input id="auth-confirm" type="password" autocomplete="new-password" placeholder="Confirm password" hidden>
-    <button type="submit" id="auth-submit">Log in</button>
-    <p id="auth-error" class="error"></p>
-  </form>
+    <form id="auth-form" class="stack">
+      <label class="field"><span>Password</span><input id="auth-password" type="password" autocomplete="current-password" required minlength="8"></label>
+      <label class="field" id="auth-confirm-field" hidden><span>Confirm password</span><input id="auth-confirm" type="password" autocomplete="new-password"></label>
+      <button type="submit" id="auth-submit" class="btn primary block">Log in</button>
+    </form>
+    <div id="auth-sso" hidden>
+      <div class="divider"><span>or</span></div>
+      <a id="auth-sso-btn" class="btn block" href="/api/oidc/login"><svg class="ic"><use href="#i-lock"/></svg><span>Sign in with SSO</span></a>
+    </div>
+    <p id="auth-error" class="error" role="alert"></p>
+  </div>
 </div>
 
-<div id="app" hidden>
-  <header>
-    <strong id="device-name">pikiosk</strong>
+<div id="app" class="shell" hidden>
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="logo"><svg><use href="#i-monitor"/></svg></span>
+      <span class="brand-text"><strong id="device-name">pikiosk</strong><small id="brand-status"><i class="dot"></i><span>connecting</span></small></span>
+    </div>
     <nav id="tabs">
-      <button data-tab="control" class="active">Control</button>
-      <button data-tab="views">Views</button>
-      <button data-tab="rotations">Rotations</button>
-      <button data-tab="sounds">Sound &amp; cast</button>
-      <button data-tab="mqtt">MQTT</button>
-      <button data-tab="network">Network</button>
-      <button data-tab="display">Display &amp; sleep</button>
-      <button data-tab="system">System</button>
+      <a href="#control" data-tab="control"><svg><use href="#i-monitor"/></svg><span>Control</span></a>
+      <a href="#views" data-tab="views"><svg><use href="#i-layers"/></svg><span>Views</span></a>
+      <a href="#rotations" data-tab="rotations"><svg><use href="#i-repeat"/></svg><span>Rotations</span></a>
+      <a href="#sounds" data-tab="sounds"><svg><use href="#i-speaker"/></svg><span>Sound &amp; cast</span></a>
+      <a href="#mqtt" data-tab="mqtt"><svg><use href="#i-radio"/></svg><span>MQTT</span></a>
+      <a href="#network" data-tab="network"><svg><use href="#i-wifi"/></svg><span>Network</span></a>
+      <a href="#display" data-tab="display"><svg><use href="#i-sun"/></svg><span>Display &amp; sleep</span></a>
+      <a href="#system" data-tab="system"><svg><use href="#i-cog"/></svg><span>System</span></a>
     </nav>
-    <a href="api.html" target="_blank" rel="noopener" class="link">API docs</a>
-    <button id="logout" class="link">Log out</button>
-  </header>
-  <div id="toast" class="toast" hidden></div>
+    <div class="sidebar-foot">
+      <a href="api.html" target="_blank" rel="noopener" class="navlink"><svg><use href="#i-book"/></svg><span>API docs</span></a>
+      <button id="logout" class="navlink" type="button"><svg><use href="#i-logout"/></svg><span>Log out <small id="whoami" class="muted"></small></span></button>
+    </div>
+  </aside>
+  <div id="toast" class="toast" role="status" hidden></div>
 
   <main>
+    <!-- Control -->
     <section data-panel="control">
+      <div class="page-head">
+        <div><h1>Control</h1><p class="muted">What the kiosk is showing, and a live remote for the screen.</p></div>
+      </div>
+      <div class="tiles" id="status"></div>
       <div class="grid2">
         <div class="card">
-          <h2>Now showing</h2>
-          <dl class="kv" id="status"></dl>
-          <div class="row">
-            <select id="ctl-view"></select>
-            <input id="ctl-duration" type="number" min="0" placeholder="Seconds (0 = stay)" class="narrow">
-            <button id="ctl-show">Show view</button>
+          <div class="card-head"><h2>Show</h2></div>
+          <div class="field-row">
+            <label class="field grow"><span>View</span><select id="ctl-view"></select></label>
+            <label class="field w-sm"><span>For seconds</span><input id="ctl-duration" type="number" min="0" placeholder="Stay"></label>
+            <button id="ctl-show" class="btn primary"><svg class="ic"><use href="#i-play"/></svg><span>Show</span></button>
           </div>
-          <div class="row">
-            <input id="ctl-url" type="url" placeholder="https://… or rtsp://…">
-            <button id="ctl-open">Open</button>
+          <div class="field-row">
+            <label class="field grow"><span>Or open a URL</span><input id="ctl-url" type="url" placeholder="https://… or rtsp://…"></label>
+            <button id="ctl-open" class="btn">Open</button>
           </div>
-          <div class="row wrap">
-            <button id="ctl-reload">Reload</button>
-            <button id="ctl-stop">Stop stream</button>
-            <button id="ctl-screen-on">Screen on</button>
-            <button id="ctl-screen-off">Screen off</button>
-            <button id="ctl-restart">Restart browser</button>
+          <h3>Rotation</h3>
+          <div class="field-row">
+            <select id="ctl-rotation" class="grow" aria-label="Rotation"></select>
+            <div class="btn-group">
+              <button id="rot-start" class="btn" title="Start from the first view"><svg class="ic"><use href="#i-play"/></svg><span>Start</span></button>
+              <button id="rot-resume" class="btn" title="Resume where it stopped">Resume</button>
+              <button id="rot-next" class="btn icon" title="Next view" aria-label="Next view"><svg class="ic"><use href="#i-skip"/></svg></button>
+              <button id="rot-stop" class="btn icon" title="Stop" aria-label="Stop rotation"><svg class="ic"><use href="#i-stop"/></svg></button>
+            </div>
           </div>
-          <div class="row">
-            <label class="grow">Brightness <input id="ctl-brightness" type="range" min="0" max="100" class="unset"> <output id="ctl-brightness-val">not set</output></label>
+          <h3>Screen</h3>
+          <div class="field-row">
+            <div class="btn-group">
+              <button id="ctl-screen-on" class="btn">On</button>
+              <button id="ctl-screen-off" class="btn">Off</button>
+            </div>
+            <label class="slider grow"><span>Brightness</span><input id="ctl-brightness" type="range" min="0" max="100" class="unset"><output id="ctl-brightness-val">not set</output></label>
           </div>
-          <h2 class="sub">Rotation</h2>
-          <div class="row wrap">
-            <select id="ctl-rotation"></select>
-            <button id="rot-start">Start</button>
-            <button id="rot-resume">Resume</button>
-            <button id="rot-next">Next</button>
-            <button id="rot-stop">Stop</button>
+          <h3>Browser</h3>
+          <div class="field-row wrap">
+            <button id="ctl-reload" class="btn"><svg class="ic"><use href="#i-refresh"/></svg><span>Reload page</span></button>
+            <button id="ctl-stop" class="btn"><svg class="ic"><use href="#i-stop"/></svg><span>Stop stream</span></button>
+            <button id="ctl-restart" class="btn"><svg class="ic"><use href="#i-power"/></svg><span>Restart browser</span></button>
           </div>
         </div>
         <div class="card">
-          <h2>Remote</h2>
-          <p class="muted">Click the preview to tap the screen. Use this to log in to a site once; cookies are kept.</p>
+          <div class="card-head">
+            <h2>Remote</h2>
+            <label class="switch-label"><input type="checkbox" id="remote-live" class="switch" checked> Live</label>
+          </div>
+          <p class="muted small">Click the preview to tap the screen, scroll over it to scroll. Log in to a site once here; cookies are kept.</p>
           <div class="preview"><img id="shot" alt="Screen preview" hidden><span id="shot-msg" class="muted">No preview yet</span></div>
-          <div class="row">
-            <input id="remote-text" placeholder="Type into the focused field" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other">
-            <button id="remote-send">Send</button>
+          <div class="field-row">
+            <input id="remote-text" class="grow" placeholder="Type into the focused field" aria-label="Text to type" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other">
+            <button id="remote-send" class="btn">Send</button>
           </div>
-          <div class="row wrap">
-            <button data-key="Tab">Tab</button>
-            <button data-key="Enter">Enter</button>
-            <button data-key="Backspace">⌫</button>
-            <button data-key="Escape">Esc</button>
-            <button data-scroll="-400">Scroll up</button>
-            <button data-scroll="400">Scroll down</button>
-            <label class="inline"><input type="checkbox" id="remote-live" checked> Live</label>
+          <div class="field-row wrap">
+            <div class="btn-group">
+              <button class="btn" data-key="Tab">Tab</button>
+              <button class="btn" data-key="Enter">Enter</button>
+              <button class="btn" data-key="Backspace" aria-label="Backspace">⌫</button>
+              <button class="btn" data-key="Escape">Esc</button>
+            </div>
+            <div class="btn-group">
+              <button class="btn icon" data-scroll="-400" title="Scroll up" aria-label="Scroll up"><svg class="ic"><use href="#i-up"/></svg></button>
+              <button class="btn icon" data-scroll="400" title="Scroll down" aria-label="Scroll down"><svg class="ic"><use href="#i-down"/></svg></button>
+            </div>
+            <span class="spacer"></span>
+            <button id="clear-browser" class="btn danger ghost">Clear site data</button>
           </div>
-          <div class="row"><button id="clear-browser" class="danger">Clear cookies and site data</button></div>
         </div>
       </div>
       <div class="card">
-        <h2>Activity</h2>
+        <div class="card-head"><h2>Activity</h2></div>
         <ol id="events" class="events"></ol>
       </div>
     </section>
 
-    <section data-panel="rotations" hidden>
-      <div class="card">
-        <h2>Rotations</h2>
-        <p class="muted">A rotation shows views in turn. Showing something for a set time pauses the rotation, which carries on afterwards; showing something with no time stops it until you resume it.</p>
-        <div id="rotations"></div>
-        <div class="row">
-          <button id="rotation-add">Add rotation</button>
-          <label class="inline">Start at boot <select id="rotations-default"></select></label>
-          <button id="rotations-save" class="primary">Save rotations</button>
+    <!-- Views -->
+    <section data-panel="views" hidden>
+      <div class="page-head">
+        <div><h1>Views</h1><p class="muted">Named web pages and camera streams. MQTT, the API and Home Assistant pick views by name. Switch a view off to skip it in every rotation; it can still be shown directly.</p></div>
+        <button id="view-add" class="btn primary"><svg class="ic"><use href="#i-plus"/></svg><span>Add view</span></button>
+      </div>
+      <div class="card flush">
+        <ul id="views-list" class="list"></ul>
+        <div id="views-empty" class="empty" hidden>
+          <p>No views yet.</p>
+          <p class="muted">Add a dashboard, a web page or a camera stream.</p>
         </div>
+      </div>
+      <div class="card">
+        <div class="field-row">
+          <label class="field grow"><span>Default view</span><select id="views-default"></select></label>
+        </div>
+        <p class="muted small">Shown at boot and after a timed view ends, unless a rotation starts at boot.</p>
       </div>
     </section>
 
+    <!-- Rotations -->
+    <section data-panel="rotations" hidden>
+      <div class="page-head">
+        <div><h1>Rotations</h1><p class="muted">A rotation shows views in turn. Showing something for a set time pauses it, and it carries on afterwards; showing something with no time stops it until resumed.</p></div>
+        <button id="rotation-add" class="btn primary"><svg class="ic"><use href="#i-plus"/></svg><span>Add rotation</span></button>
+      </div>
+      <div id="rotations"></div>
+      <div id="rotations-empty" class="card empty" hidden>
+        <p>No rotations yet.</p>
+        <p class="muted">Add views first, then a rotation to cycle through them.</p>
+      </div>
+      <div class="card">
+        <label class="field"><span>Start at boot</span><select id="rotations-default"></select></label>
+      </div>
+      <div class="savebar" id="rotations-savebar" hidden>
+        <span>Unsaved changes</span>
+        <button id="rotations-discard" class="btn ghost">Discard</button>
+        <button id="rotations-save" class="btn primary">Save rotations</button>
+      </div>
+    </section>
+
+    <!-- Sound & cast -->
     <section data-panel="sounds" hidden>
+      <div class="page-head"><div><h1>Sound &amp; cast</h1><p class="muted">Sounds, volume, and receiving media from phones and Home Assistant.</p></div></div>
       <div class="grid2">
         <div class="card">
-          <h2>Library</h2>
-          <table class="sounds"><tbody id="sounds-body"></tbody></table>
-          <form id="sound-upload" class="row">
-            <input type="file" name="file" accept=".mp3,.ogg,.oga,.opus,.wav,.flac,.m4a,.aac" required>
-            <button class="primary">Upload</button>
-          </form>
-        </div>
-        <div class="card">
-          <h2>Playback</h2>
-          <div class="row">
-            <input id="sound-url" placeholder="Sound name, library path or https://… URL">
-            <button id="sound-play">Play</button>
-            <button id="sound-stop">Stop</button>
+          <div class="card-head"><h2>Playback</h2></div>
+          <label class="slider"><span>Volume</span><input id="volume" type="range" min="0" max="100"><output id="volume-val"></output></label>
+          <label class="switch-label"><input type="checkbox" id="volume-save" class="switch"> Apply this volume at every boot</label>
+          <div class="field-row">
+            <label class="field grow"><span>Play</span><input id="sound-url" placeholder="Sound name, library path or https://… URL"></label>
+            <button id="sound-play" class="btn"><svg class="ic"><use href="#i-play"/></svg><span>Play</span></button>
+            <button id="sound-stop" class="btn icon" title="Stop" aria-label="Stop sound"><svg class="ic"><use href="#i-stop"/></svg></button>
           </div>
-          <div class="row">
-            <label class="grow">Volume <input id="volume" type="range" min="0" max="100"> <output id="volume-val"></output></label>
-          </div>
-          <label class="inline"><input type="checkbox" id="volume-save"> Apply this volume at every boot</label>
-          <p class="muted">Home Assistant can also use the kiosk as a speaker: it shows up as a DLNA media player (Settings → Devices &amp; services → DLNA Digital Media Renderer), so TTS and media can be sent to it directly.</p>
         </div>
         <form class="card" id="cast-form">
-          <h2>Casting</h2>
-          <p>AirPlay: <span id="cast-status" class="badge"></span></p>
-          <label class="inline"><input type="checkbox" name="airplay"> AirPlay receiver</label>
-          <label class="inline"><input type="checkbox" name="pin"> Ask new devices for a PIN shown on screen</label>
-          <label>Name shown to devices <input name="name" placeholder="Device name" maxlength="64"></label>
-          <p class="muted">iPhones, iPads and Macs on the same network can mirror their screen or play video and music here (Control Center → Screen Mirroring). The cast covers the screen until the device disconnects. Android phones can send media over DLNA with an app such as BubbleUPnP.</p>
-          <div class="row"><button class="primary">Save casting</button></div>
+          <div class="card-head"><h2>Casting</h2><span id="cast-status" class="badge"></span></div>
+          <label class="switch-label"><input type="checkbox" name="airplay" class="switch"> AirPlay receiver</label>
+          <label class="switch-label"><input type="checkbox" name="pin" class="switch"> Ask new devices for a PIN shown on screen</label>
+          <label class="field"><span>Name shown to devices</span><input name="name" placeholder="Device name" maxlength="64"></label>
+          <p class="muted small">iPhones, iPads and Macs on the same network can mirror their screen or play video and music here (Control Center → Screen Mirroring). Android phones and Home Assistant send media over DLNA: the kiosk shows up as a DLNA Digital Media Renderer.</p>
+          <div class="card-foot"><button class="btn primary">Save</button></div>
         </form>
       </div>
-    </section>
-
-    <section data-panel="views" hidden>
       <div class="card">
-        <h2>Views</h2>
-        <p class="muted">A view is a named web page or stream. MQTT, the API and Home Assistant select views by name. Untick a view to skip it in rotations; it can still be shown directly.</p>
-        <table class="views">
-          <thead><tr><th title="Include in rotations">On</th><th>Name</th><th>Type</th><th>URL</th><th></th></tr></thead>
-          <tbody id="views-body"></tbody>
-        </table>
-        <div class="row">
-          <button id="view-add">Add view</button>
-          <label class="inline">Default view <select id="views-default"></select></label>
-          <button id="views-save" class="primary">Save views</button>
+        <div class="card-head">
+          <h2>Library</h2>
+          <form id="sound-upload" class="upload">
+            <label class="btn"><svg class="ic"><use href="#i-plus"/></svg><span>Upload</span><input type="file" name="file" accept=".mp3,.ogg,.oga,.opus,.wav,.flac,.m4a,.aac" hidden></label>
+          </form>
         </div>
+        <ul id="sounds-list" class="list compact"></ul>
       </div>
     </section>
 
+    <!-- MQTT -->
     <section data-panel="mqtt" hidden>
+      <div class="page-head"><div><h1>MQTT</h1><p class="muted">Control the kiosk from Home Assistant or any MQTT client.</p></div></div>
       <form class="card" id="mqtt-form">
-        <h2>MQTT</h2>
-        <p>Status: <span id="mqtt-status" class="badge"></span></p>
-        <label class="inline"><input type="checkbox" name="enabled"> Enabled</label>
-        <div class="grid2">
-          <label>Host <input name="host" placeholder="mqtt.lan"></label>
-          <label>Port <input name="port" type="number" min="1" max="65535"></label>
-          <label>Username <input name="username" autocomplete="off"></label>
-          <label>Password <input name="password" type="password" autocomplete="new-password"></label>
-          <label>Base topic <input name="base_topic"></label>
-          <label>Discovery prefix <input name="discovery_prefix"></label>
+        <div class="card-head">
+          <label class="switch-label strong"><input type="checkbox" name="enabled" class="switch"> Connect to a broker</label>
+          <span id="mqtt-status" class="badge"></span>
         </div>
-        <label class="inline"><input type="checkbox" name="tls"> TLS</label>
-        <label class="inline"><input type="checkbox" name="tls_insecure"> Skip certificate check</label>
-        <label class="inline"><input type="checkbox" name="discovery"> Home Assistant discovery</label>
-        <div class="row"><button class="primary">Save MQTT</button></div>
-        <details>
-          <summary>Topics</summary>
-          <pre id="mqtt-topics"></pre>
-        </details>
+        <div class="grid-fields">
+          <label class="field"><span>Host</span><input name="host" placeholder="mqtt.lan"></label>
+          <label class="field"><span>Port</span><input name="port" type="number" min="1" max="65535"></label>
+          <label class="field"><span>Username</span><input name="username" autocomplete="off"></label>
+          <label class="field"><span>Password</span><input name="password" type="password" autocomplete="new-password"></label>
+          <label class="field"><span>Base topic</span><input name="base_topic"></label>
+          <label class="field"><span>Discovery prefix</span><input name="discovery_prefix"></label>
+        </div>
+        <div class="switches">
+          <label class="switch-label"><input type="checkbox" name="tls" class="switch"> TLS</label>
+          <label class="switch-label"><input type="checkbox" name="tls_insecure" class="switch"> Skip certificate check</label>
+          <label class="switch-label"><input type="checkbox" name="discovery" class="switch"> Home Assistant discovery</label>
+        </div>
+        <div class="card-foot"><button class="btn primary">Save</button></div>
       </form>
+      <div class="card">
+        <div class="card-head"><h2>Home Assistant discovery</h2></div>
+        <p class="muted small">The kiosk publishes one retained device message, which Home Assistant 2024.12 or newer turns into a device with all its entities:</p>
+        <p><code id="mqtt-discovery-topic"></code></p>
+        <div class="field-row wrap">
+          <button id="mqtt-republish" class="btn"><svg class="ic"><use href="#i-refresh"/></svg><span>Republish now</span></button>
+          <button id="mqtt-clear" class="btn danger ghost"><svg class="ic"><use href="#i-trash"/></svg><span>Clear retained messages</span></button>
+        </div>
+        <p class="muted small">Clearing removes the device from Home Assistant and deletes the retained state, sound list and availability. They come back with Republish or the next reconnect.</p>
+      </div>
+      <details class="card">
+        <summary><h2>Topics</h2></summary>
+        <pre id="mqtt-topics"></pre>
+      </details>
     </section>
 
+    <!-- Network -->
     <section data-panel="network" hidden>
+      <div class="page-head"><div><h1>Network</h1><p class="muted">Interfaces, addressing and Wi-Fi.</p></div></div>
+      <div id="net-list"></div>
       <div class="card">
-        <h2>Interfaces</h2>
-        <div id="net-list"></div>
-      </div>
-      <div class="card">
-        <h2>Wi-Fi</h2>
-        <div class="row"><button id="wifi-scan">Scan</button></div>
-        <div id="wifi-list"></div>
-        <div class="row">
-          <input id="wifi-ssid" placeholder="SSID">
-          <input id="wifi-pass" type="password" placeholder="Password" autocomplete="new-password">
-          <button id="wifi-connect">Connect</button>
+        <div class="card-head"><h2>Wi-Fi</h2><button id="wifi-scan" class="btn"><svg class="ic"><use href="#i-refresh"/></svg><span>Scan</span></button></div>
+        <ul id="wifi-list" class="list compact"></ul>
+        <div class="field-row">
+          <label class="field grow"><span>Network name</span><input id="wifi-ssid"></label>
+          <label class="field grow"><span>Password</span><input id="wifi-pass" type="password" autocomplete="new-password"></label>
+          <button id="wifi-connect" class="btn primary">Connect</button>
         </div>
       </div>
     </section>
 
+    <!-- Display & sleep -->
     <section data-panel="display" hidden>
-      <form class="card" id="display-form">
-        <h2>Display</h2>
-        <div class="grid2">
-          <label>Rotation
-            <select name="rotation"><option value="0">0°</option><option value="90">90°</option><option value="180">180°</option><option value="270">270°</option></select>
-          </label>
-          <label>Scale <input name="scale" type="number" step="0.05" min="0.5" max="4"></label>
-          <label>Brightness at start (-1 = leave alone) <input name="brightness" type="number" min="-1" max="100"></label>
-          <label>Hide cursor after seconds (0 = never) <input name="hide_cursor_seconds" type="number" min="0"></label>
-        </div>
-        <div class="row"><button class="primary">Save display</button></div>
-      </form>
-      <form class="card" id="sleep-form">
-        <h2>Sleep</h2>
-        <div class="grid2">
-          <label>Screen off after idle minutes (0 = never) <input name="idle_minutes" type="number" min="0"></label>
-          <div>
-            <label class="inline"><input type="checkbox" name="wake_on_input"> Wake on touch, mouse or keyboard</label>
-            <label class="inline"><input type="checkbox" name="wake_on_command"> Wake when a view or stream is shown</label>
+      <div class="page-head"><div><h1>Display &amp; sleep</h1><p class="muted">Orientation, scaling and when the screen turns off.</p></div></div>
+      <div class="grid2">
+        <form class="card" id="display-form">
+          <div class="card-head"><h2>Display</h2></div>
+          <div class="grid-fields">
+            <label class="field"><span>Rotation</span>
+              <select name="rotation"><option value="0">0°</option><option value="90">90°</option><option value="180">180°</option><option value="270">270°</option></select>
+            </label>
+            <label class="field"><span>Scale</span><input name="scale" type="number" step="0.05" min="0.5" max="4"></label>
+            <label class="field"><span>Brightness at start</span><input name="brightness" type="number" min="-1" max="100"><small>-1 leaves it alone</small></label>
+            <label class="field"><span>Hide cursor after (s)</span><input name="hide_cursor_seconds" type="number" min="0"><small>0 never hides it</small></label>
           </div>
-        </div>
-        <label class="inline"><input type="checkbox" name="schedule_enabled"> Daily schedule</label>
-        <div class="grid2">
-          <label>Screen off at <input name="schedule_off" type="time"></label>
-          <label>Screen on at <input name="schedule_on" type="time"></label>
-        </div>
-        <div class="row wrap" id="weekdays"></div>
-        <p class="muted">Leave all days unticked to use the schedule every day.</p>
-        <div class="row"><button class="primary">Save sleep</button></div>
-      </form>
+          <div class="card-foot"><button class="btn primary">Save</button></div>
+        </form>
+        <form class="card" id="sleep-form">
+          <div class="card-head"><h2>Sleep</h2></div>
+          <label class="field"><span>Screen off after idle minutes</span><input name="idle_minutes" type="number" min="0"><small>0 never turns it off</small></label>
+          <label class="switch-label"><input type="checkbox" name="wake_on_input" class="switch"> Wake on touch, mouse or keyboard</label>
+          <label class="switch-label"><input type="checkbox" name="wake_on_command" class="switch"> Wake when a view or stream is shown</label>
+          <h3><label class="switch-label strong"><input type="checkbox" name="schedule_enabled" class="switch"> Daily schedule</label></h3>
+          <div class="grid-fields">
+            <label class="field"><span>Screen off at</span><input name="schedule_off" type="time"></label>
+            <label class="field"><span>Screen on at</span><input name="schedule_on" type="time"></label>
+          </div>
+          <div class="days" id="weekdays"></div>
+          <p class="muted small">No days picked means every day.</p>
+          <div class="card-foot"><button class="btn primary">Save</button></div>
+        </form>
+      </div>
     </section>
 
+    <!-- System -->
     <section data-panel="system" hidden>
+      <div class="page-head"><div><h1>System</h1><p class="muted">Device identity, updates and access.</p></div></div>
       <div class="grid2">
-        <form class="card" id="general-form">
-          <h2>Device</h2>
-          <label>Name <input name="device_name" required></label>
-          <label>ID (MQTT and Home Assistant) <input name="device_id" required pattern="[a-z0-9_-]{1,48}"></label>
-          <div class="row"><button class="primary">Save device</button></div>
-        </form>
         <div class="card">
-          <h2>System</h2>
+          <div class="card-head"><h2>System</h2></div>
           <dl class="kv" id="sys-info"></dl>
-          <div class="row">
-            <input id="tz" placeholder="America/Chicago">
-            <button id="tz-save">Set timezone</button>
+          <div class="field-row">
+            <label class="field grow"><span>Timezone</span><input id="tz" placeholder="America/Chicago"></label>
+            <button id="tz-save" class="btn">Set</button>
           </div>
-          <div class="row wrap">
-            <button id="sys-update">Update</button>
-            <button id="sys-rollback">Roll back</button>
-            <button id="sys-reboot" class="danger">Reboot</button>
+          <div class="card-foot">
+            <button id="sys-reboot" class="btn danger ghost"><svg class="ic"><use href="#i-power"/></svg><span>Reboot</span></button>
+            <span class="spacer"></span>
+            <button id="sys-rollback" class="btn">Roll back</button>
+            <button id="sys-update" class="btn primary"><svg class="ic"><use href="#i-refresh"/></svg><span>Update</span></button>
           </div>
           <pre id="update-log" hidden></pre>
         </div>
-        <form class="card" id="password-form">
-          <h2>Password</h2>
-          <input name="current" type="password" placeholder="Current password" autocomplete="current-password" required>
-          <input name="new" type="password" placeholder="New password" autocomplete="new-password" minlength="8" required>
-          <div class="row"><button class="primary">Change password</button></div>
+        <form class="card" id="general-form">
+          <div class="card-head"><h2>Device</h2></div>
+          <label class="field"><span>Name</span><input name="device_name" required></label>
+          <label class="field"><span>ID</span><input name="device_id" required pattern="[a-z0-9_-]{1,48}"><small>Used in MQTT topics and Home Assistant entity IDs.</small></label>
+          <div class="card-foot"><button class="btn primary">Save</button></div>
         </form>
-        <div class="card">
-          <h2>API token</h2>
-          <p class="muted">Send as <code>Authorization: Bearer &lt;token&gt;</code>.</p>
-          <div class="row">
-            <input id="api-token" readonly>
-            <button id="token-show">Show</button>
-            <button id="token-new" class="danger">Regenerate</button>
+        <form class="card" id="oidc-form">
+          <div class="card-head">
+            <label class="switch-label strong"><input type="checkbox" name="enabled" class="switch"> Single sign-on (OIDC)</label>
+          </div>
+          <p class="muted small">Sign in through Authentik, Keycloak or another OpenID Connect provider. The admin password keeps working.</p>
+          <label class="field"><span>Issuer URL</span><input name="issuer" type="url" placeholder="https://auth.example.com/application/o/pikiosk/"></label>
+          <div class="grid-fields">
+            <label class="field"><span>Client ID</span><input name="client_id" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore></label>
+            <label class="field"><span>Client secret</span><input name="client_secret" type="password" autocomplete="new-password" placeholder="Empty for a public client" data-1p-ignore data-lpignore="true" data-bwignore></label>
+          </div>
+          <label class="field"><span>Allowed groups</span><input name="allowed_groups" placeholder="Any user the provider allows"><small>Comma separated. Checked against the groups claim.</small></label>
+          <label class="field"><span>Button label</span><input name="button_label" placeholder="Sign in with SSO"></label>
+          <label class="field"><span>Redirect URI to register</span>
+            <span class="copy"><input name="redirect_url" placeholder=""><button type="button" class="btn icon" id="oidc-copy" title="Copy" aria-label="Copy redirect URI"><svg class="ic"><use href="#i-copy"/></svg></button></span>
+            <small>Leave empty to use the address in the browser's location bar.</small>
+          </label>
+          <div class="card-foot"><button class="btn primary">Save</button></div>
+        </form>
+        <div class="stack-col">
+          <form class="card" id="password-form">
+            <div class="card-head"><h2>Admin password</h2></div>
+            <label class="field"><span>Current password</span><input name="current" type="password" autocomplete="current-password" required></label>
+            <label class="field"><span>New password</span><input name="new" type="password" autocomplete="new-password" minlength="8" required><small>At least 8 characters.</small></label>
+            <div class="card-foot"><button class="btn primary">Change password</button></div>
+          </form>
+          <div class="card">
+            <div class="card-head"><h2>API token</h2></div>
+            <p class="muted small">Send as <code>Authorization: Bearer &lt;token&gt;</code>. See the <a href="api.html" target="_blank" rel="noopener">API docs</a>.</p>
+            <div class="field-row">
+              <input id="api-token" class="grow mono" readonly aria-label="API token">
+              <button id="token-show" class="btn">Show</button>
+              <button id="token-new" class="btn danger ghost">Regenerate</button>
+            </div>
           </div>
         </div>
       </div>
@@ -277,87 +381,124 @@
   </main>
 </div>
 
-<template id="rotation-card">
-  <div class="rotation">
-    <div class="row">
-      <input data-f="name" placeholder="Rotation name" required>
-      <button type="button" data-act="add-item">Add view</button>
-      <button type="button" data-act="start">Start</button>
-      <button type="button" data-act="del" class="danger">Delete rotation</button>
+<template id="view-item">
+  <li class="vrow">
+    <label class="switch-wrap" title="Include in rotations"><input type="checkbox" class="switch" data-f="enabled" aria-label="Include in rotations"></label>
+    <div class="vmain">
+      <div class="vtitle"><strong data-f="name"></strong><span class="chips" data-f="chips"></span></div>
+      <div class="vurl mono" data-f="url"></div>
     </div>
-    <ol class="items"></ol>
+    <div class="vact">
+      <button type="button" class="btn sm" data-act="show" title="Show on the kiosk now"><svg class="ic"><use href="#i-play"/></svg><span>Show</span></button>
+      <button type="button" class="btn sm" data-act="edit"><svg class="ic"><use href="#i-edit"/></svg><span>Configure</span></button>
+      <div class="btn-group">
+        <button type="button" class="btn sm icon" data-act="up" title="Move up" aria-label="Move up"><svg class="ic"><use href="#i-up"/></svg></button>
+        <button type="button" class="btn sm icon" data-act="down" title="Move down" aria-label="Move down"><svg class="ic"><use href="#i-down"/></svg></button>
+      </div>
+    </div>
+  </li>
+</template>
+
+<template id="rotation-card">
+  <div class="card rotation">
+    <div class="card-head">
+      <input data-f="name" class="title-input" placeholder="Rotation name" aria-label="Rotation name" required>
+      <span class="chips" data-f="chips"></span>
+      <span class="spacer"></span>
+      <button type="button" class="btn sm" data-act="start"><svg class="ic"><use href="#i-play"/></svg><span>Start</span></button>
+      <button type="button" class="btn sm icon danger ghost" data-act="del" title="Delete rotation" aria-label="Delete rotation"><svg class="ic"><use href="#i-trash"/></svg></button>
+    </div>
+    <ol class="steps"></ol>
+    <button type="button" class="btn ghost sm" data-act="add-item"><svg class="ic"><use href="#i-plus"/></svg><span>Add step</span></button>
   </div>
 </template>
 
 <template id="rotation-item">
-  <li class="row">
-    <select data-f="view"></select>
-    <input data-f="seconds" type="number" min="3" value="30" class="narrow"> s
-    <button type="button" data-act="up">↑</button>
-    <button type="button" data-act="del" class="danger">✕</button>
+  <li class="step">
+    <label class="switch-wrap" title="Include this step"><input type="checkbox" class="switch" data-f="enabled" aria-label="Include this step"></label>
+    <span class="num"></span>
+    <select data-f="view" aria-label="View"></select>
+    <span class="secs"><input data-f="seconds" type="number" min="3" value="30" aria-label="Seconds"><span>s</span></span>
+    <span class="note muted small" data-f="note"></span>
+    <div class="btn-group">
+      <button type="button" class="btn sm icon" data-act="up" title="Move up" aria-label="Move up"><svg class="ic"><use href="#i-up"/></svg></button>
+      <button type="button" class="btn sm icon" data-act="down" title="Move down" aria-label="Move down"><svg class="ic"><use href="#i-down"/></svg></button>
+    </div>
+    <button type="button" class="btn sm icon ghost" data-act="del" title="Remove step" aria-label="Remove step"><svg class="ic"><use href="#i-x"/></svg></button>
   </li>
 </template>
 
-<template id="view-row">
-  <tr>
-    <td class="en"><input data-f="enabled" type="checkbox" title="Include in rotations"></td>
-    <td><input data-f="name" required></td>
-    <td><select data-f="type"><option value="web">Web</option><option value="stream">Stream</option></select></td>
-    <td><input data-f="url" class="wide" required></td>
-    <td class="actions">
-      <button type="button" data-act="show">Show</button>
-      <button type="button" data-act="customize">Customize</button>
-      <button type="button" data-act="up" title="Move up">↑</button>
-      <button type="button" data-act="del" class="danger" title="Delete">✕</button>
-    </td>
-  </tr>
-</template>
-
 <template id="header-row">
-  <div class="row">
-    <input data-f="name" placeholder="Header name" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore>
-    <input data-f="value" placeholder="Value" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore>
-    <button type="button" data-act="del" class="danger" title="Remove">✕</button>
+  <div class="field-row header-row">
+    <input data-f="name" class="grow" placeholder="Header name" aria-label="Header name" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore>
+    <input data-f="value" class="grow" placeholder="Value" aria-label="Header value" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore>
+    <button type="button" data-act="del" class="btn icon ghost" title="Remove" aria-label="Remove header"><svg class="ic"><use href="#i-x"/></svg></button>
   </div>
 </template>
 
-<dialog id="customize">
-  <form method="dialog" id="customize-form">
-    <h2>Customize <span id="cz-name"></span></h2>
-    <div id="cz-web">
-      <label>Authentication
-        <select name="auth_type">
-          <option value="">None</option>
-          <option value="basic">HTTP basic</option>
-          <option value="bearer">Bearer token</option>
-          <option value="home_assistant">Home Assistant long-lived token</option>
-        </select>
-      </label>
-      <div data-auth="basic" class="grid2">
-        <label>Username <input name="auth_username" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore></label>
-        <label>Password <input name="auth_password" type="password" autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore></label>
-      </div>
-      <div data-auth="token">
-        <label>Token <input name="auth_token" type="password" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore></label>
-      </div>
-      <p class="muted" data-auth="home_assistant">Create the token in Home Assistant under your profile → Security → Long-lived access tokens.</p>
-      <p class="muted" data-auth="header">Credentials and headers are sent only to the view's own origin.</p>
-      <h3>Request headers</h3>
-      <div id="cz-headers"></div>
-      <div class="row"><button type="button" id="cz-header-add">Add header</button></div>
-      <h3>Page</h3>
-      <div class="grid2">
-        <label>Zoom (1 = 100%) <input name="zoom" type="number" step="0.05" min="0.1" max="5" placeholder="1"></label>
-        <label>Reload every N seconds (0 = never) <input name="refresh_seconds" type="number" min="0" placeholder="0"></label>
-      </div>
-      <label>Custom CSS <textarea name="css" rows="5" spellcheck="false" placeholder="header { display: none; }"></textarea></label>
+<dialog id="view-editor" class="drawer">
+  <form id="ve-form" novalidate>
+    <div class="drawer-head">
+      <h2 id="ve-title">Configure view</h2>
+      <button type="button" class="btn icon ghost" data-act="close" aria-label="Close"><svg class="ic"><use href="#i-x"/></svg></button>
     </div>
-    <p class="muted" id="cz-stream">Streams have no extra options. Put credentials in the URL (rtsp://user:pass@host/…).</p>
-    <div class="row end">
-      <button value="cancel" formnovalidate>Cancel</button>
-      <button value="ok" class="primary" id="cz-ok">Apply</button>
+    <div class="drawer-body">
+      <fieldset>
+        <label class="field"><span>Name</span><input name="name" required autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore></label>
+        <div class="field"><span>Type</span>
+          <div class="segmented">
+            <label><input type="radio" name="type" value="web"><span>Web page</span></label>
+            <label><input type="radio" name="type" value="stream"><span>Camera stream</span></label>
+          </div>
+        </div>
+        <label class="field"><span>URL</span><input name="url" required autocomplete="off" class="mono"><small id="ve-url-hint"></small></label>
+        <label class="switch-label"><input type="checkbox" name="enabled" class="switch"> Include in rotations</label>
+        <label class="switch-label"><input type="checkbox" name="default" class="switch"> Default view</label>
+      </fieldset>
+      <div id="ve-web">
+        <fieldset>
+          <legend>Sign-in</legend>
+          <label class="field"><span>Authentication</span>
+            <select name="auth_type">
+              <option value="">None</option>
+              <option value="basic">HTTP basic</option>
+              <option value="bearer">Bearer token</option>
+              <option value="home_assistant">Home Assistant long-lived token</option>
+            </select>
+          </label>
+          <div data-auth="basic" class="grid-fields">
+            <label class="field"><span>Username</span><input name="auth_username" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore></label>
+            <label class="field"><span>Password</span><input name="auth_password" type="password" autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore></label>
+          </div>
+          <label class="field" data-auth="token"><span>Token</span><input name="auth_token" type="password" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore></label>
+          <p class="muted small" data-auth="home_assistant">Create one in Home Assistant under your profile → Security → Long-lived access tokens.</p>
+          <p class="muted small">Credentials and headers are only sent to the view's own site. For other logins, use the Remote on the Control page once; cookies are kept.</p>
+        </fieldset>
+        <fieldset>
+          <legend>Request headers</legend>
+          <div id="ve-headers"></div>
+          <button type="button" id="ve-header-add" class="btn ghost sm"><svg class="ic"><use href="#i-plus"/></svg><span>Add header</span></button>
+        </fieldset>
+        <fieldset>
+          <legend>Page</legend>
+          <div class="grid-fields">
+            <label class="field"><span>Zoom</span><input name="zoom" type="number" step="0.05" min="0.1" max="5" placeholder="1"><small>1 = 100%</small></label>
+            <label class="field"><span>Reload every (s)</span><input name="refresh_seconds" type="number" min="0" placeholder="0"><small>0 never reloads</small></label>
+          </div>
+          <label class="switch-label"><input type="checkbox" name="keep_loaded" class="switch"> Keep loaded in the background</label>
+          <p class="muted small">The page keeps running in a hidden tab after another view is shown, so switching back is instant and it stays up to date. Each kept page uses memory; keep it to a few. Rotations preload the next page on their own.</p>
+          <label class="field"><span>Custom CSS</span><textarea name="css" rows="5" spellcheck="false" placeholder="header { display: none; }"></textarea></label>
+        </fieldset>
+      </div>
+      <p id="ve-stream" class="muted small">Put stream credentials in the URL, like rtsp://user:pass@camera/stream.</p>
+      <p id="ve-error" class="error" role="alert"></p>
     </div>
-    <p class="muted">Apply keeps the changes in the table; press Save views to store them.</p>
+    <div class="drawer-foot">
+      <button type="button" class="btn danger ghost" data-act="delete"><svg class="ic"><use href="#i-trash"/></svg><span>Delete</span></button>
+      <span class="spacer"></span>
+      <button type="button" class="btn" data-act="close">Cancel</button>
+      <button type="submit" class="btn primary">Save</button>
+    </div>
   </form>
 </dialog>
 </body>

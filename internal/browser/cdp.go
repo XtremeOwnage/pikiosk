@@ -43,28 +43,66 @@ type cdpMessage struct {
 }
 
 type target struct {
+	ID                   string `json:"id"`
 	Type                 string `json:"type"`
 	URL                  string `json:"url"`
 	WebSocketDebuggerURL string `json:"webSocketDebuggerUrl"`
 }
 
-func findPage(ctx context.Context, port int) (string, error) {
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://127.0.0.1:%d/json/list", port), nil)
+// browserEndpoint returns the browser-level DevTools WebSocket URL.
+func browserEndpoint(ctx context.Context, port int) (string, error) {
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://127.0.0.1:%d/json/version", port), nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return "", err
 	}
 	defer resp.Body.Close()
-	var targets []target
-	if err := json.NewDecoder(resp.Body).Decode(&targets); err != nil {
+	var v struct {
+		WebSocketDebuggerURL string `json:"webSocketDebuggerUrl"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&v); err != nil {
 		return "", err
+	}
+	if v.WebSocketDebuggerURL == "" {
+		return "", errors.New("no browser endpoint")
+	}
+	return v.WebSocketDebuggerURL, nil
+}
+
+func listTargets(ctx context.Context, port int) ([]target, error) {
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://127.0.0.1:%d/json/list", port), nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var targets []target
+	err = json.NewDecoder(resp.Body).Decode(&targets)
+	return targets, err
+}
+
+func pageIDs(ctx context.Context, port int) ([]string, error) {
+	targets, err := listTargets(ctx, port)
+	var ids []string
+	for _, t := range targets {
+		if t.Type == "page" {
+			ids = append(ids, t.ID)
+		}
+	}
+	return ids, err
+}
+
+func findPage(ctx context.Context, port int) (id, wsURL string, err error) {
+	targets, err := listTargets(ctx, port)
+	if err != nil {
+		return "", "", err
 	}
 	for _, t := range targets {
 		if t.Type == "page" && t.WebSocketDebuggerURL != "" {
-			return t.WebSocketDebuggerURL, nil
+			return t.ID, t.WebSocketDebuggerURL, nil
 		}
 	}
-	return "", errors.New("no page target")
+	return "", "", errors.New("no page target")
 }
 
 func dial(ctx context.Context, wsURL string, onEvent func(string, json.RawMessage)) (*cdp, error) {

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -39,6 +40,9 @@ type View struct {
 	Zoom float64 `json:"zoom,omitempty"`
 	// RefreshSeconds reloads a web view periodically; 0 disables.
 	RefreshSeconds int `json:"refresh_seconds,omitempty"`
+	// KeepLoaded leaves a web view running in a background tab after another
+	// view is shown, so switching back is instant.
+	KeepLoaded bool `json:"keep_loaded,omitempty"`
 
 	// HAToken is the pre-Auth form of AuthHomeAssistant; read and migrated.
 	HAToken string `json:"ha_token,omitempty"`
@@ -86,6 +90,27 @@ type Rotation struct {
 type RotationItem struct {
 	View    string `json:"view"`
 	Seconds int    `json:"seconds"`
+	// Disabled skips this step without removing it.
+	Disabled bool `json:"disabled,omitempty"`
+}
+
+// OIDC signs users in to the web UI through an OpenID Connect provider such
+// as Authentik. The admin password keeps working alongside it.
+type OIDC struct {
+	Enabled bool `json:"enabled"`
+	// Issuer is the provider's issuer URL; discovery is read from
+	// <issuer>/.well-known/openid-configuration.
+	Issuer   string `json:"issuer"`
+	ClientID string `json:"client_id"`
+	// ClientSecret is empty for a public client, which uses PKCE alone.
+	ClientSecret string `json:"client_secret,omitempty"`
+	// RedirectURL overrides http(s)://<host the browser used>/api/oidc/callback.
+	RedirectURL string `json:"redirect_url,omitempty"`
+	// AllowedGroups limits sign-in to members of any of these groups (from
+	// the groups claim). Empty allows every user the provider lets through.
+	AllowedGroups []string `json:"allowed_groups,omitempty"`
+	// ButtonLabel is shown on the login page.
+	ButtonLabel string `json:"button_label,omitempty"`
 }
 
 type Cast struct {
@@ -153,6 +178,7 @@ type Config struct {
 	MQTT            MQTT    `json:"mqtt"`
 	Display         Display `json:"display"`
 	Sleep           Sleep   `json:"sleep"`
+	OIDC            OIDC    `json:"oidc"`
 
 	PasswordHash string `json:"password_hash,omitempty"`
 	APIToken     string `json:"api_token,omitempty"`
@@ -240,8 +266,8 @@ func (c *Config) Validate() error {
 		default:
 			return fmt.Errorf("view %q: unknown auth type %q", v.Name, v.Auth.Type)
 		}
-		if v.Type == ViewStream && (v.Auth.Type != AuthNone || len(v.Headers) > 0 || v.CSS != "") {
-			return fmt.Errorf("view %q: auth, headers and CSS apply to web views only", v.Name)
+		if v.Type == ViewStream && (v.Auth.Type != AuthNone || len(v.Headers) > 0 || v.CSS != "" || v.KeepLoaded) {
+			return fmt.Errorf("view %q: auth, headers, CSS and keep loaded apply to web views only", v.Name)
 		}
 		hdrs := v.Headers[:0]
 		for _, h := range v.Headers {
@@ -290,6 +316,9 @@ func (c *Config) Validate() error {
 	}
 	if c.DefaultRotation != "" && !rotSeen[c.DefaultRotation] {
 		return fmt.Errorf("default rotation %q does not exist", c.DefaultRotation)
+	}
+	if err := c.OIDC.validate(); err != nil {
+		return err
 	}
 	c.Cast.Name = strings.TrimSpace(c.Cast.Name)
 	if len(c.Cast.Name) > 64 {
@@ -495,4 +524,36 @@ func RandomToken() string {
 		panic(err)
 	}
 	return hex.EncodeToString(b)
+}
+
+func (o *OIDC) validate() error {
+	o.Issuer = strings.TrimSpace(o.Issuer)
+	o.ClientID = strings.TrimSpace(o.ClientID)
+	o.RedirectURL = strings.TrimSpace(o.RedirectURL)
+	o.ButtonLabel = strings.TrimSpace(o.ButtonLabel)
+	groups := o.AllowedGroups[:0]
+	for _, g := range o.AllowedGroups {
+		if g = strings.TrimSpace(g); g != "" {
+			groups = append(groups, g)
+		}
+	}
+	o.AllowedGroups = groups
+	if len(o.AllowedGroups) == 0 {
+		o.AllowedGroups = nil
+	}
+	if !o.Enabled {
+		return nil
+	}
+	if u, err := url.Parse(o.Issuer); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+		return errors.New("single sign-on: issuer must be an http(s) URL")
+	}
+	if o.ClientID == "" {
+		return errors.New("single sign-on: client ID is required")
+	}
+	if o.RedirectURL != "" {
+		if u, err := url.Parse(o.RedirectURL); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+			return errors.New("single sign-on: redirect URL must be an http(s) URL")
+		}
+	}
+	return nil
 }

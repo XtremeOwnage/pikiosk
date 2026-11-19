@@ -21,7 +21,7 @@ To re-run the first boot on the same card, change `instance_id` in `meta-data` o
 
 ## A site shows its login page
 
-Use the remote preview on the Control tab to log in once, or set authentication in the view's *Customize* dialog (see [Views](../guides/views.md#authentication)). Sites behind single sign-on, such as Authentik, often accept a header or a trusted-network rule for the kiosk's address instead.
+Use the remote preview on the Control tab to log in once, or set sign-in under the view's **Configure** panel (see [Views](../guides/views.md#sign-in)). Sites behind single sign-on, such as Authentik, often accept a header or a trusted-network rule for the kiosk's address instead.
 
 ## No sound
 

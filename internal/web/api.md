@@ -10,7 +10,7 @@ Send the API token from **System → API token** in the web UI:
 Authorization: Bearer <token>
 ```
 
-The web UI itself uses a session cookie from `POST /api/login`. Requests with a session cookie that change something must send `Content-Type: application/json` (or the `X-Pikiosk` header for uploads); this blocks cross-site form posts.
+The web UI itself uses a session cookie from `POST /api/login` or from single sign-on (see below). Requests with a session cookie that change something must send `Content-Type: application/json` (or the `X-Pikiosk` header for uploads); this blocks cross-site form posts.
 
 Errors come back with a 4xx or 5xx status and `{"error": "message"}`.
 
@@ -53,7 +53,7 @@ Actions accepted by `POST /api/command` and MQTT: `view`, `url`, `stream`, `stop
 
 | Method and path | Returns |
 | --- | --- |
-| `GET /api/state` | `state` (mode, view, URL, screen, brightness, rotation, sound, volume, casting, last activity), `browser`, `player`, `mqtt`, `cast` and `device` (CPU temperature, load, memory, IP, version). |
+| `GET /api/state` | `state` (mode, view, URL, screen, brightness, rotation, sound, volume, casting, last activity), `browser` (running, connected, restarts, `background_tabs`, the visible page `title`), `player`, `mqtt`, `cast` and `device` (CPU temperature, load, memory, IP, version). |
 | `GET /api/events` | The latest activity entries: `[{"time", "type", "message"}]`. |
 | `GET /api/screenshot` | A JPEG of the browser page. Streams and AirPlay are drawn over the browser and do not appear. |
 | `POST /api/input` | Remote input into the page. `{"type": "click", "x": 0.5, "y": 0.5}` and `{"type": "scroll", "x": 0.5, "y": 0.5, "dy": 400}` take positions as fractions of the screen; `{"type": "text", "text": "hello"}` types into the focused field; `{"type": "key", "key": "Enter"}` presses Enter, Tab, Backspace, Escape or an arrow key. |
@@ -73,12 +73,13 @@ Actions accepted by `POST /api/command` and MQTT: `view`, `url`, `stream`, `stop
 | Method and path | Body |
 | --- | --- |
 | `PUT /api/config/general` | `{"device_name", "device_id", "default_view"}` |
-| `PUT /api/config/views` | `{"views": [View], "default_view": "name"}` |
-| `PUT /api/config/rotations` | `{"rotations": [{"name", "items": [{"view", "seconds"}]}], "default_rotation": "name"}` |
+| `PUT /api/config/views` | `{"views": [View], "default_view": "name", "renames": {"old name": "new name"}}`. `renames` is optional; rotations and the default view follow a renamed view. |
+| `PUT /api/config/rotations` | `{"rotations": [{"name", "items": [{"view", "seconds", "disabled"}]}], "default_rotation": "name"}`. A `disabled` step is skipped without being removed. |
 | `PUT /api/config/audio` | `{"volume": -1}` (-1 leaves the system volume alone at boot) |
 | `PUT /api/config/cast` | `{"airplay": true, "name": "", "pin": false}` |
 | `PUT /api/config/mqtt` | `{"enabled", "host", "port", "tls", "tls_insecure", "username", "password", "base_topic", "discovery", "discovery_prefix"}` |
 | `PUT /api/config/display` | `{"rotation": 0, "scale": 1, "brightness": -1, "hide_cursor_seconds": 3}` |
+| `PUT /api/config/oidc` | `{"enabled", "issuer", "client_id", "client_secret", "allowed_groups": [], "button_label", "redirect_url"}`. When enabled, the issuer's discovery document must be reachable or the save is refused. |
 | `PUT /api/config/sleep` | `{"idle_minutes", "wake_on_input", "wake_on_command", "schedule_enabled", "schedule_off": "22:00", "schedule_on": "07:00", "schedule_weekdays": [1,2,3,4,5]}` |
 | `POST /api/password` | `{"current", "new"}` |
 | `POST /api/token` | Returns a new `{"api_token"}`; the old one stops working. |
@@ -106,6 +107,13 @@ A view:
   - `home_assistant`, with a long-lived access token that the Home Assistant frontend picks up, so the dashboard loads without a login
 - Headers and credentials are sent only to the view's own origin, never to other sites the page loads from.
 
+## MQTT
+
+| Method and path | What it does |
+| --- | --- |
+| `POST /api/mqtt/discovery` | Publish the Home Assistant discovery message, state, sound list and availability again. Returns `{"topic"}`, the discovery topic. |
+| `POST /api/mqtt/clear` | Delete this kiosk's retained messages: discovery (which removes the device from Home Assistant), state, sound list and availability. Returns `{"topics": []}`. They are published again on the next reconnect or `POST /api/mqtt/discovery`. |
+
 ## Network and system
 
 | Method and path | Body | What it does |
@@ -121,4 +129,4 @@ A view:
 
 ## Open endpoints
 
-These need no token: `GET /api/auth` (whether a password is set and whether you are logged in), `POST /api/setup` (set the first password), `POST /api/login`, `POST /api/logout`. `POST /api/activity` and `GET /api/welcome` answer only on loopback; the kiosk's own session uses them.
+These need no token: `GET /api/auth` (whether a password is set, whether you are logged in and as whom, and the single sign-on button label when it is on), `POST /api/setup` (set the first password), `POST /api/login`, `POST /api/logout`, and the single sign-on redirects `GET /api/oidc/login` and `GET /api/oidc/callback`. `POST /api/activity` and `GET /api/welcome` answer only on loopback; the kiosk's own session uses them.
