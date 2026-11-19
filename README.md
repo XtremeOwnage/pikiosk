@@ -8,13 +8,13 @@ Turn a Raspberry Pi and a monitor into a wall display that you control from Home
 
 Every action is available over MQTT (with Home Assistant discovery), a REST API and a built-in web interface.
 
-It needs no cloud services, accounts or telemetry.
+It needs no cloud services, accounts or telemetry, and once installed it runs fully without internet access. Internet is only used to download packages during the first boot and when you press Update ([details](https://xtremeownage.github.io/pikiosk/operations/offline/)).
 
 **Documentation: <https://xtremeownage.github.io/pikiosk/>**
 
 ## Quick start
 
-You need a 64-bit Raspberry Pi (5, 4, 400 or 500), a microSD card of 8 GB or more, a monitor, and internet access for the first boot.
+You need a 64-bit Raspberry Pi (5, 4, 400 or 500), a microSD card of 8 GB or more, a monitor, and internet access for the first boot (to download packages).
 
 1. Download `pikiosk-<version>-raspios-arm64.img.xz` from the [latest release](https://github.com/XtremeOwnage/pikiosk/releases/latest).
 2. Flash it with Raspberry Pi Imager: *Use custom* → the image. Answer **No** to OS customisation.

@@ -7,7 +7,7 @@ description: Common problems and how to fix them remotely.
 
 ## The first boot never reaches the welcome page
 
-- The install needs internet access. Check that the Pi got an address (your router's DHCP leases) and can reach the internet.
+- The first boot downloads its packages (Chromium, sway, mpv and the rest) from the Debian and Raspberry Pi mirrors, so it needs internet access once. Check that the Pi got an address (your router's DHCP leases) and that its network is allowed out. After the install it runs without internet; see [Running without internet](offline.md).
 - On Wi-Fi, check the `ssid`, `password` and `country` in `wifi.txt`. The file is deleted once read, so re-create it and boot again.
 - With SSH keys installed, read the log: `ssh admin@pikiosk.local cat /var/log/pikiosk-install.log`.
 

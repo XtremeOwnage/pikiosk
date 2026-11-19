@@ -13,7 +13,7 @@ description: Flash the pikiosk image, add Wi-Fi and SSH keys, and boot.
     - The Pi 5 and Pi 4 have micro-HDMI ports.
     - DVI monitors need a micro-HDMI to DVI cable.
     - DisplayPort monitors need an *active* HDMI-to-DisplayPort adapter.
-- A network with internet access for the **first boot only**. The installer downloads its packages from the Debian and Raspberry Pi mirrors.
+- Internet access for the **first boot only**. The image is stock Raspberry Pi OS Lite, and the first boot downloads Chromium and the other packages it needs from the Debian and Raspberry Pi mirrors. After that the kiosk runs fully offline; see [Running without internet](../operations/offline.md).
 - Optional: a USB speaker or USB audio adapter. The Pi 5 has no headphone jack, and DVI carries no sound.
 
 ## 1. Download

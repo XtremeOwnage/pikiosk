@@ -13,7 +13,7 @@ pikiosk turns a Raspberry Pi and a monitor into a wall display that you control 
 
 Every action is available over MQTT (with Home Assistant discovery), a REST API and a built-in web interface.
 
-It needs no cloud services, accounts or telemetry. Everything it does stays on your network.
+It needs no cloud services, accounts or telemetry. Everything it does stays on your network, and once installed it runs [without internet access](operations/offline.md).
 
 [Install it](getting-started/installation.md){ .md-button .md-button--primary } [REST API](reference/rest-api.md){ .md-button }
 

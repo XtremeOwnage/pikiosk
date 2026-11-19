@@ -1,14 +1,18 @@
 #!/bin/sh
 # Restarts NetworkManager after 5 and 15 minutes without the gateway;
-# reboots after 30.
+# reboots after 30. Only the local network is checked, never the internet.
 state=/run/pikiosk-netwatch
 gw=$(ip -4 route show default | awk '{print $3; exit}')
 if [ -n "$gw" ] && ping -c 2 -W 3 "$gw" >/dev/null 2>&1; then
   rm -f $state
   exit 0
 fi
-if [ -z "$gw" ] && ! nmcli -t -f NAME connection show | grep -q .; then
-  exit 0
+if [ -z "$gw" ]; then
+  # No gateway: fine on an isolated network as long as we have an address.
+  if ip -4 -o addr show scope global | grep -q . || ! nmcli -t -f NAME connection show | grep -q .; then
+    rm -f $state
+    exit 0
+  fi
 fi
 n=$(( $(cat $state 2>/dev/null || echo 0) + 1 ))
 echo $n > $state

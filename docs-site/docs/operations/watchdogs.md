@@ -13,6 +13,6 @@ description: How the kiosk recovers from hangs and crashes without anyone touchi
 | Display | A display session that stops answering is restarted. |
 | Streams | A stream that drops is retried. |
 | AirPlay | UxPlay is restarted with a growing delay if it exits. |
-| Network | NetworkManager is restarted after 5 minutes without reaching the gateway; the Pi reboots after 30. |
+| Network | NetworkManager is restarted after 5 minutes without reaching the local gateway; the Pi reboots after 30. It never checks the internet, and a network without a gateway counts as healthy while the kiosk has an address. |
 
 Every watchdog action appears in the activity feed: on the Control tab, at `GET /api/events`, and on the MQTT `…/event` topic.
