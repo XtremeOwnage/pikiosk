@@ -336,6 +336,9 @@ in
         Type = "notify";
         NotifyAccess = "main";
         WatchdogSec = 90;
+        # After a watchdog abort, do not wait for every Chromium process to
+        # dump core before restarting.
+        TimeoutAbortSec = 10;
         Restart = "always";
         RestartSec = 3;
         StateDirectory = "pikiosk";
