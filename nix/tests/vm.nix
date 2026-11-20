@@ -417,6 +417,23 @@ pkgs.testers.runNixOSTest {
         api("PUT", "/api/config/cast", dict(cfg["cast"], youtube=True, youtube_keep_ready=False))
         kiosk.wait_until_succeeds("! curl -s http://127.0.0.1:9222/json/list | grep -q 'tv cobalt'", timeout=30)
 
+    with subtest("backup: export, change, restore"):
+        full = json.loads(api("GET", "/api/backup"))
+        assert full["format"] == "pikiosk-backup" and full["config"].get("password_hash") and full["config"].get("api_token"), full.keys()
+        bare = api("GET", "/api/backup?secrets=0")
+        assert "password_hash" not in bare and '"pw"' not in bare and "hello" not in bare, "secrets in a backup without secrets"
+        cfg = json.loads(api("GET", "/api/config"))
+        changed = [dict(v, url="http://127.0.0.1:8000/two.html") if v["name"] == "one" else v for v in cfg["views"]]
+        api("PUT", "/api/config/views", {"views": changed, "default_view": cfg["default_view"]})
+        # A backup without secrets keeps the kiosk's own: hdr still sends them.
+        api("POST", "/api/backup/restore", {"backup": json.loads(bare), "sections": ["views"]})
+        assert [v["url"] for v in json.loads(api("GET", "/api/config"))["views"] if v["name"] == "one"] == ["http://127.0.0.1:8000/"]
+        api("POST", "/api/view", {"name": "hdr"})
+        wait_title("hdr=hello auth=Basic a2lvc2s6cHc=")
+        kiosk.fail(f"{C} -X POST http://127.0.0.1/api/backup/restore -d '{{\"backup\":{{\"format\":\"other\"}},\"sections\":[\"views\"]}}'")
+        api("POST", "/api/view", {"name": "one"})
+        wait_title("pikiosk test page")
+
     with subtest("sounds: library, playback and activity events over MQTT"):
         sounds = json.loads(kiosk.succeed("mosquitto_sub -h 127.0.0.1 -t pikiosk/test/sounds -C 1 -W 10"))
         assert {"chime", "doorbell", "alert", "success"} <= set(sounds), sounds

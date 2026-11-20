@@ -1081,6 +1081,85 @@ $("#oidc-copy").addEventListener("click", async () => {
   }
 });
 
+// --- backup & restore ---
+
+const SECTION_LABELS = {
+  views: "Views and rotations",
+  sounds: "Uploaded sounds and boot volume",
+  mqtt: "MQTT and Home Assistant discovery",
+  display: "Display and sleep",
+  cast: "AirPlay and YouTube casting",
+  sso: "Single sign-on",
+  updates: "Release check and automatic updates",
+  device: "Device name and ID",
+  access: "Admin password and API token",
+};
+let pendingBackup = null;
+
+$("#backup-secrets").addEventListener("change", (e) => {
+  $("#backup-download").href = "/api/backup" + (e.target.checked ? "" : "?secrets=0");
+  $("#backup-secrets-note").textContent = e.target.checked
+    ? "The file then holds the admin password hash, the API token and every view, MQTT and sign-in secret. Keep it somewhere safe."
+    : "Secrets are left out. Restoring keeps the secrets the kiosk already has.";
+});
+
+$("#backup-file").addEventListener("change", async (e) => {
+  const f = e.target.files[0];
+  e.target.value = "";
+  if (!f) return;
+  let b;
+  try {
+    b = JSON.parse(await f.text());
+  } catch {
+    return toast("That file is not a pikiosk backup", true);
+  }
+  if (b.format !== "pikiosk-backup") return toast("That file is not a pikiosk backup", true);
+  pendingBackup = b;
+  const c = b.config || {};
+  const sameDevice = c.device_id === config.device_id;
+  const rows = [
+    ["File", f.name],
+    ["From", (c.device_name || "?") + " (" + (c.device_id || "?") + ")"],
+    ["Made", new Date(b.created).toLocaleString() + ", pikiosk " + (b.pikiosk_version || "?")],
+    ["Contains", `${(c.views || []).length} views, ${(c.rotations || []).length} rotations, ${(b.sounds || []).length} sounds` + (b.secrets ? ", with secrets" : ", without secrets")],
+  ];
+  $("#backup-summary").replaceChildren(...rows.flatMap(([k, v]) => [el("dt", k), el("dd", v)]));
+  $("#backup-sections").replaceChildren(...Object.entries(SECTION_LABELS).map(([key, label]) => {
+    const l = el("label", null, "switch-label");
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.className = "switch";
+    cb.value = key;
+    // On another kiosk, keep its own identity and login by default.
+    cb.checked = sameDevice || (key !== "device" && key !== "access");
+    if (key === "access" && !b.secrets) { cb.checked = false; cb.disabled = true; }
+    l.append(cb, " " + label);
+    return l;
+  }));
+  $("#backup-hint").textContent = sameDevice
+    ? "This backup is from this kiosk: everything is selected."
+    : "This backup is from another kiosk: its name, ID and login are left out unless you pick them.";
+  $("#backup-preview").hidden = false;
+});
+
+$("#backup-restore").addEventListener("click", async () => {
+  if (!pendingBackup) return;
+  const sections = $$("#backup-sections input:checked").map((c) => c.value);
+  if (!sections.length) return toast("Pick at least one part", true);
+  if (!confirm("Replace these settings with the backup's? " + sections.map((s) => SECTION_LABELS[s]).join(", "))) return;
+  const r = await act(() => api("POST", "/api/backup/restore", { backup: pendingBackup, sections }));
+  if (!r) return;
+  toast(`Restored${r.sounds ? ", " + r.sounds + " sounds" : ""}`);
+  pendingBackup = null;
+  $("#backup-preview").hidden = true;
+  if (sections.includes("access")) {
+    authInfo = await api("GET", "/api/auth");
+    if (!authInfo.authenticated) return showAuth(false);
+  }
+  await loadConfig();
+  loadSystem();
+});
+
 $("#general-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const f = e.target;

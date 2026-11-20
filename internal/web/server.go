@@ -36,7 +36,7 @@ var static embed.FS
 const (
 	sessionCookie = "pikiosk_session"
 	sessionTTL    = 7 * 24 * time.Hour
-	redacted      = "********"
+	redacted      = config.Redacted
 )
 
 type Server struct {
@@ -134,6 +134,8 @@ func (s *Server) Handler() http.Handler {
 	api("POST /api/update/check", s.checkUpdate)
 	api("POST /api/password", s.changePassword)
 	api("POST /api/token", s.regenerateToken)
+	api("GET /api/backup", s.exportBackup)
+	api("POST /api/backup/restore", s.restoreBackup)
 
 	api("GET /api/network", s.getNetwork)
 	api("POST /api/network/wifi/scan", s.scanWiFi)
@@ -519,47 +521,9 @@ func (s *Server) getConfig(w http.ResponseWriter, r *http.Request) {
 		c.OIDC.ClientSecret = redacted
 	}
 	for i := range c.Views {
-		redactView(&c.Views[i])
+		config.RedactView(&c.Views[i])
 	}
 	writeJSON(w, c)
-}
-
-// redactView hides credentials and header values.
-func redactView(v *config.View) {
-	if v.Auth.Password != "" {
-		v.Auth.Password = redacted
-	}
-	if v.Auth.Token != "" {
-		v.Auth.Token = redacted
-	}
-	for i := range v.Headers {
-		if v.Headers[i].Value != "" {
-			v.Headers[i].Value = redacted
-		}
-	}
-}
-
-func unredactView(v *config.View, old config.View) {
-	if v.Auth.Password == redacted {
-		v.Auth.Password = old.Auth.Password
-	}
-	if v.Auth.Token == redacted {
-		v.Auth.Token = old.Auth.Token
-	}
-	if v.HAToken == redacted {
-		v.HAToken = old.Auth.Token
-	}
-	for i, h := range v.Headers {
-		if h.Value != redacted {
-			continue
-		}
-		v.Headers[i].Value = ""
-		for _, o := range old.Headers {
-			if strings.EqualFold(o.Name, h.Name) {
-				v.Headers[i].Value = o.Value
-			}
-		}
-	}
 }
 
 func (s *Server) update(w http.ResponseWriter, fn func(*config.Config) error) {
@@ -610,7 +574,7 @@ func (s *Server) putViews(w http.ResponseWriter, r *http.Request) {
 				name = old
 			}
 			old, _ := c.View(name)
-			unredactView(&body.Views[i], old)
+			config.UnredactView(&body.Views[i], old)
 		}
 		// Copy before editing: the slices are shared with the live config.
 		rots := make([]config.Rotation, len(c.Rotations))

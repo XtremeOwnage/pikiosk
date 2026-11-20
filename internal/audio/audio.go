@@ -251,6 +251,32 @@ func (p *Player) Save(filename string, r io.Reader) (Sound, error) {
 	return Sound{Name: name, Size: n}, nil
 }
 
+// File is an uploaded sound as stored, for backups.
+type File struct {
+	Name string `json:"file"`
+	Data []byte `json:"data"`
+}
+
+// UserFiles returns the uploaded sounds with their contents.
+func (p *Player) UserFiles() ([]File, error) {
+	entries, err := os.ReadDir(p.userDir)
+	if err != nil {
+		return nil, err
+	}
+	var out []File
+	for _, e := range entries {
+		if e.IsDir() || strings.HasPrefix(e.Name(), ".") || !slices.Contains(Extensions, strings.ToLower(filepath.Ext(e.Name()))) {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(p.userDir, e.Name()))
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, File{Name: e.Name(), Data: data})
+	}
+	return out, nil
+}
+
 // Delete removes a user sound. Built-in sounds cannot be deleted.
 func (p *Player) Delete(name string) error {
 	name = sanitize(name)

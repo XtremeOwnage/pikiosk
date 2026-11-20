@@ -5,7 +5,7 @@ description: Update packages and pikiosk from the web UI, over SSH, or from a ch
 
 # Updating
 
-None of these methods needs a reflash, and settings in `/var/lib/pikiosk` are kept.
+None of these methods needs a reflash, and settings in `/var/lib/pikiosk` are kept. Before a reflash, download a [backup](backup.md).
 
 ## Release check
 

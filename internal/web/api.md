@@ -125,6 +125,13 @@ A view:
 | `POST /api/mqtt/discovery` | Publish the Home Assistant discovery message, state, sound list and availability again. Returns `{"topic"}`, the discovery topic. |
 | `POST /api/mqtt/clear` | Delete this kiosk's retained messages: discovery (which removes the device from Home Assistant), state, sound list and availability. Returns `{"topics": []}`. They are published again on the next reconnect or `POST /api/mqtt/discovery`. |
 
+## Backup
+
+| Method and path | Body | What it does |
+| --- | --- | --- |
+| `GET /api/backup` | | Download a backup: `{"format": "pikiosk-backup", "format_version": 1, "created", "pikiosk_version", "secrets", "config": {…}, "sounds": [{"file", "data"}]}`. Sound data is base64. `?secrets=0` replaces passwords, tokens and header values with `********` and leaves out the admin password and API token. |
+| `POST /api/backup/restore` | `{"backup": {…}, "sections": ["views", "sounds", "mqtt", "display", "cast", "sso", "updates", "device", "access"]}` | Restore the listed parts. `********` keeps the current secret. Returns `{"ok", "sections", "sounds"}`. |
+
 ## Network and system
 
 | Method and path | Body | What it does |

@@ -17,6 +17,7 @@ description: Release notes.
 - The YouTube receiver listens on every network the kiosk is on, so a wired kiosk can also join the phones' Wi-Fi and be found there. Wi-Fi scan and connect turn the Wi-Fi radio on first.
 - The release image has every package installed, so the first boot needs no internet.
 - `get.sh`: install on an existing Raspberry Pi OS Lite with one command, without reflashing.
+- Backup and restore: one file with the settings, views, rotations and uploaded sounds, with or without secrets; restore all of it or only some parts, also onto another kiosk.
 - `self-update.sh` only installs a release that is newer than what is running.
 - Screenshots throughout the documentation.
 - Redesigned web UI: sidebar navigation, switches, a side panel to configure each view, and a status overview on the Control page.

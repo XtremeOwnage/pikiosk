@@ -401,6 +401,23 @@
           </label>
           <div class="card-foot"><button class="btn primary">Save</button></div>
         </form>
+        <div class="card" id="backup-card">
+          <div class="card-head"><h2>Backup &amp; restore</h2></div>
+          <p class="muted small">One file with the settings, views, rotations and uploaded sounds. Restore it here after a reflash, or on another kiosk to copy its setup. Browser logins (cookies) are not included.</p>
+          <h3>Export</h3>
+          <label class="switch-label"><input type="checkbox" id="backup-secrets" class="switch" checked> Include passwords and tokens</label>
+          <p class="muted small" id="backup-secrets-note">The file then holds the admin password hash, the API token and every view, MQTT and sign-in secret. Keep it somewhere safe.</p>
+          <div class="field-row"><a id="backup-download" class="btn primary" href="/api/backup"><svg class="ic"><use href="#i-copy"/></svg><span>Download backup</span></a></div>
+          <h3>Restore</h3>
+          <label class="btn"><svg class="ic"><use href="#i-plus"/></svg><span>Choose a backup file</span><input type="file" id="backup-file" accept=".json,application/json" hidden></label>
+          <div id="backup-preview" hidden>
+            <dl class="kv" id="backup-summary"></dl>
+            <p class="muted small">Restore these parts:</p>
+            <div id="backup-sections"></div>
+            <p class="muted small" id="backup-hint"></p>
+            <div class="card-foot"><button type="button" id="backup-restore" class="btn danger-solid">Restore</button></div>
+          </div>
+        </div>
         <div class="stack-col">
           <form class="card" id="password-form">
             <div class="card-head"><h2>Admin password</h2></div>
