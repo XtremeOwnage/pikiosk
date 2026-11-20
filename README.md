@@ -4,24 +4,30 @@ Turn a Raspberry Pi and a monitor into a wall display that you control from Home
 
 - show web dashboards and camera streams, and rotate through them
 - play chimes and announcements, and work as a speaker for Home Assistant
-- accept AirPlay from Apple devices
+- accept AirPlay from Apple devices, and show up under the cast button in the YouTube app
+- preload the next page of a rotation, so dashboards appear fully drawn
 
 Every action is available over MQTT (with Home Assistant discovery), a REST API and a built-in web interface.
 
-It needs no cloud services, accounts or telemetry, and once installed it runs fully without internet access. Internet is only used to download packages during the first boot and when you press Update ([details](https://xtremeownage.github.io/pikiosk/operations/offline/)).
+It needs no cloud services, accounts or telemetry, and it runs fully without internet access, first boot included. Internet is only used when you press Update, by an optional twice-daily release check, and for sites you point it at ([details](https://xtremeownage.github.io/pikiosk/operations/offline/)).
 
 **Documentation: <https://xtremeownage.github.io/pikiosk/>**
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs-site/docs/assets/screenshots/control-dark.png">
+  <img alt="The pikiosk web UI: what the kiosk is showing, quick commands and a live preview of the screen" src="docs-site/docs/assets/screenshots/control-light.png">
+</picture>
+
 ## Quick start
 
-You need a 64-bit Raspberry Pi (5, 4, 400 or 500), a microSD card of 8 GB or more, a monitor, and internet access for the first boot (to download packages).
+You need a 64-bit Raspberry Pi (5, 4, 400 or 500), a microSD card of 8 GB or more, and a monitor. No internet is needed.
 
 1. Download `pikiosk-<version>-raspios-arm64.img.xz` from the [latest release](https://github.com/XtremeOwnage/pikiosk/releases/latest).
 2. Flash it with Raspberry Pi Imager: *Use custom* → the image. Answer **No** to OS customisation.
 3. Optional, on the card's `bootfs` partition:
    - copy `wifi.txt.example` to `wifi.txt` and fill it in
    - copy `authorized_keys.example` to `authorized_keys` and add your SSH public keys
-4. Boot the Pi. The first boot installs pikiosk (5 to 20 minutes) and reboots.
+4. Boot the Pi. The first boot sets up pikiosk (a few minutes) and reboots.
 5. Open the address shown on screen, for example `http://pikiosk.local`, and choose an admin password.
 
 ## Features

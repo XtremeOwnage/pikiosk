@@ -5,6 +5,9 @@ description: Rotation, scale, brightness, idle timeout and the daily schedule.
 
 # Display and sleep
 
+![The Display and sleep page](../assets/screenshots/display-light.png#only-light)
+![The Display and sleep page](../assets/screenshots/display-dark.png#only-dark)
+
 ## Display
 
 | Setting | |

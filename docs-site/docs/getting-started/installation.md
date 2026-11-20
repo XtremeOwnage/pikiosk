@@ -13,12 +13,12 @@ description: Flash the pikiosk image, add Wi-Fi and SSH keys, and boot.
     - The Pi 5 and Pi 4 have micro-HDMI ports.
     - DVI monitors need a micro-HDMI to DVI cable.
     - DisplayPort monitors need an *active* HDMI-to-DisplayPort adapter.
-- Internet access for the **first boot only**. The image is stock Raspberry Pi OS Lite, and the first boot downloads Chromium and the other packages it needs from the Debian and Raspberry Pi mirrors. After that the kiosk runs fully offline; see [Running without internet](../operations/offline.md).
+- No internet: the release image has every package installed, so the first boot and everything after it work offline. See [Running without internet](../operations/offline.md).
 - Optional: a USB speaker or USB audio adapter. The Pi 5 has no headphone jack, and DVI carries no sound.
 
 ## 1. Download
 
-Get `pikiosk-<version>-raspios-arm64.img.xz` from the [latest release](https://github.com/XtremeOwnage/pikiosk/releases/latest). It is the official Raspberry Pi OS Lite image with pikiosk's first-boot setup added; nothing else is changed.
+Get `pikiosk-<version>-raspios-arm64.img.xz` from the [latest release](https://github.com/XtremeOwnage/pikiosk/releases/latest). It is the official Raspberry Pi OS Lite image with pikiosk's packages installed and its first-boot setup added; nothing else is changed.
 
 ## 2. Flash
 
@@ -63,7 +63,7 @@ Both files are deleted after first boot, so the Wi-Fi password does not stay on 
 Put the card in the Pi, connect the monitor and network, and power it on. The first boot:
 
 1. Boots Raspberry Pi OS and joins the network.
-2. Installs pikiosk and its packages. This takes 5 to 20 minutes, depending on your connection and SD card. The screen shows a text console meanwhile.
+2. Sets up pikiosk. The packages are already on the image, so this takes a few minutes and needs no network. The screen shows a text console meanwhile.
 3. Reboots into the kiosk.
 
 The screen then shows a welcome page with the addresses to open, for example `http://pikiosk.local`. If it doesn't appear, see [Troubleshooting](../operations/troubleshooting.md).

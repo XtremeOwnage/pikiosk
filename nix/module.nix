@@ -106,6 +106,18 @@ in
       description = "Install UxPlay so the kiosk can act as an AirPlay receiver (switched on and off in the web UI). Needs mdns.";
     };
 
+    releases = mkOption {
+      type = types.str;
+      default = "XtremeOwnage/pikiosk";
+      description = "GitHub owner/repo whose releases the update check watches (switched on and off in the web UI). Empty turns the check off.";
+    };
+
+    releasesApi = mkOption {
+      type = types.str;
+      default = "https://api.github.com";
+      description = "GitHub API base URL for the update check.";
+    };
+
     mdns = mkOption {
       type = types.bool;
       default = true;
@@ -229,7 +241,8 @@ in
       unitConfig.StartLimitIntervalSec = 0;
     };
     # SSDP discovery replies.
-    networking.firewall.allowedUDPPorts = mkIf cfg.dlna [ 1900 ];
+    # SSDP: DLNA and the YouTube cast receiver (DIAL) are found through it.
+    networking.firewall.allowedUDPPorts = [ 1900 ];
     networking.firewall.extraCommands = mkIf cfg.dlna ''
       iptables -A nixos-fw -p udp -m pkttype --pkt-type multicast -j nixos-fw-accept || true
     '';
@@ -268,7 +281,9 @@ in
     networking.networkmanager.enable = true;
     networking.firewall.allowedTCPPorts =
       lib.optional cfg.openFirewall cfg.port ++ lib.optional cfg.dlna 49494
-      ++ lib.optionals cfg.airplay [ 7100 7101 7102 ];
+      ++ lib.optionals cfg.airplay [ 7100 7101 7102 ]
+      # YouTube cast receiver (DIAL), switched on and off in the web UI.
+      ++ [ 56790 ];
     networking.firewall.allowedUDPPortRanges = lib.optional cfg.airplay { from = 7100; to = 7102; };
 
     # Runtime-settable timezone from the web UI.
@@ -327,6 +342,8 @@ in
         PIKIOSK_UXPLAY = if cfg.airplay then lib.getExe pkgs.uxplay else "/nonexistent/uxplay";
         PIKIOSK_CHROMIUM_FLAGS = lib.concatStringsSep " " cfg.chromiumFlags;
         PIKIOSK_SOUNDS = "${builtinSounds}";
+        PIKIOSK_RELEASES = cfg.releases;
+        PIKIOSK_RELEASES_API = cfg.releasesApi;
         PULSE_SERVER = "unix:${runtimeDir}/pulse/native";
       };
       serviceConfig = {

@@ -13,8 +13,10 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
+	"time"
 )
 
 type ViewType string
@@ -94,6 +96,71 @@ type RotationItem struct {
 	Disabled bool `json:"disabled,omitempty"`
 }
 
+// UpdateCheck asks GitHub for new pikiosk releases twice a day. It is on
+// by default and only reports, unless Auto is on.
+type UpdateCheck struct {
+	Disabled bool `json:"disabled"`
+	// Auto runs System -> Update (packages and a newer pikiosk) once a day
+	// inside the window below. Needs the check on.
+	Auto bool `json:"auto"`
+	// AutoDays are weekdays (0 = Sunday) the window applies to; empty is
+	// every day.
+	AutoDays []int `json:"auto_days,omitempty"`
+	// AutoFrom and AutoTo bound the window, "HH:MM" local time. A window
+	// that ends before it starts runs past midnight.
+	AutoFrom string `json:"auto_from,omitempty"`
+	AutoTo   string `json:"auto_to,omitempty"`
+}
+
+// InWindow reports whether t falls in the automatic update window.
+func (u UpdateCheck) InWindow(t time.Time) bool {
+	from, err1 := time.Parse("15:04", u.AutoFrom)
+	to, err2 := time.Parse("15:04", u.AutoTo)
+	if err1 != nil || err2 != nil {
+		return false
+	}
+	min := t.Hour()*60 + t.Minute()
+	f, e := from.Hour()*60+from.Minute(), to.Hour()*60+to.Minute()
+	day := t.Weekday()
+	in := false
+	switch {
+	case f < e:
+		in = min >= f && min < e
+	case f > e:
+		in = min >= f || min < e
+		if min < e {
+			day = (day + 6) % 7 // the window started the day before
+		}
+	}
+	return in && (len(u.AutoDays) == 0 || slices.Contains(u.AutoDays, int(day)))
+}
+
+func (u *UpdateCheck) validate() error {
+	if u.AutoFrom == "" {
+		u.AutoFrom = "03:00"
+	}
+	if u.AutoTo == "" {
+		u.AutoTo = "05:00"
+	}
+	for _, v := range []string{u.AutoFrom, u.AutoTo} {
+		if _, err := time.Parse("15:04", v); err != nil {
+			return fmt.Errorf("update window: %q is not HH:MM", v)
+		}
+	}
+	if u.AutoFrom == u.AutoTo {
+		return errors.New("update window: start and end are the same")
+	}
+	for _, d := range u.AutoDays {
+		if d < 0 || d > 6 {
+			return errors.New("update window: days are 0 (Sunday) to 6")
+		}
+	}
+	if u.Disabled {
+		u.Auto = false
+	}
+	return nil
+}
+
 // OIDC signs users in to the web UI through an OpenID Connect provider such
 // as Authentik. The admin password keeps working alongside it.
 type OIDC struct {
@@ -120,6 +187,10 @@ type Cast struct {
 	Name string `json:"name"`
 	// PIN asks a new client for a code shown on the screen.
 	PIN bool `json:"pin"`
+	// YouTube makes the kiosk show up in the YouTube app's cast menu (DIAL).
+	YouTube bool `json:"youtube"`
+	// YouTubeUserAgent overrides the TV user agent YouTube's TV app needs.
+	YouTubeUserAgent string `json:"youtube_user_agent,omitempty"`
 }
 
 type Audio struct {
@@ -172,13 +243,14 @@ type Config struct {
 	DefaultView string     `json:"default_view"`
 	Rotations   []Rotation `json:"rotations"`
 	// DefaultRotation starts at boot instead of the default view.
-	DefaultRotation string  `json:"default_rotation"`
-	Audio           Audio   `json:"audio"`
-	Cast            Cast    `json:"cast"`
-	MQTT            MQTT    `json:"mqtt"`
-	Display         Display `json:"display"`
-	Sleep           Sleep   `json:"sleep"`
-	OIDC            OIDC    `json:"oidc"`
+	DefaultRotation string      `json:"default_rotation"`
+	Audio           Audio       `json:"audio"`
+	Cast            Cast        `json:"cast"`
+	MQTT            MQTT        `json:"mqtt"`
+	Display         Display     `json:"display"`
+	Sleep           Sleep       `json:"sleep"`
+	OIDC            OIDC        `json:"oidc"`
+	UpdateCheck     UpdateCheck `json:"update_check"`
 
 	PasswordHash string `json:"password_hash,omitempty"`
 	APIToken     string `json:"api_token,omitempty"`
@@ -196,7 +268,7 @@ func Default(deviceID string) Config {
 		Views:      []View{},
 		Rotations:  []Rotation{},
 		Audio:      Audio{Volume: -1},
-		Cast:       Cast{AirPlay: true},
+		Cast:       Cast{AirPlay: true, YouTube: true},
 		MQTT: MQTT{
 			Port:            1883,
 			BaseTopic:       "pikiosk/" + deviceID,
@@ -318,6 +390,9 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("default rotation %q does not exist", c.DefaultRotation)
 	}
 	if err := c.OIDC.validate(); err != nil {
+		return err
+	}
+	if err := c.UpdateCheck.validate(); err != nil {
 		return err
 	}
 	c.Cast.Name = strings.TrimSpace(c.Cast.Name)

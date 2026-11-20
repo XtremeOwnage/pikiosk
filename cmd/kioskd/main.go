@@ -22,11 +22,13 @@ import (
 	"github.com/XtremeOwnage/pikiosk/internal/browser"
 	"github.com/XtremeOwnage/pikiosk/internal/cast"
 	"github.com/XtremeOwnage/pikiosk/internal/config"
+	"github.com/XtremeOwnage/pikiosk/internal/dial"
 	"github.com/XtremeOwnage/pikiosk/internal/display"
 	"github.com/XtremeOwnage/pikiosk/internal/kiosk"
 	"github.com/XtremeOwnage/pikiosk/internal/mqtt"
 	"github.com/XtremeOwnage/pikiosk/internal/player"
 	"github.com/XtremeOwnage/pikiosk/internal/system"
+	"github.com/XtremeOwnage/pikiosk/internal/update"
 	"github.com/XtremeOwnage/pikiosk/internal/web"
 )
 
@@ -97,6 +99,23 @@ func run(log *slog.Logger, stateDir, listen, chromium, mpv string, devtools int,
 	applyCast(cfg.Get())
 	cfg.Subscribe(func(_, c config.Config) { applyCast(c) })
 
+	if u := os.Getenv("PIKIOSK_YOUTUBE_TV"); u != "" {
+		dial.TVURL = u
+	}
+	yt := dial.New(dialPort, dial.StableUUID(cfg.Get().DeviceID), youtubeTV{k: k, cfg: cfg}, log)
+	applyYouTube := func(c config.Config) {
+		name := c.Cast.Name
+		if name == "" {
+			name = c.DeviceName
+		}
+		yt.Configure(c.Cast.YouTube, name)
+		if !c.Cast.YouTube && k.WebCasting() == "youtube" {
+			_ = k.StopWebCast(context.Background())
+		}
+	}
+	applyYouTube(cfg.Get())
+	cfg.Subscribe(func(_, c config.Config) { applyYouTube(c) })
+
 	webURL := func() string {
 		addrs := system.LocalAddresses()
 		if len(addrs) == 0 {
@@ -115,7 +134,23 @@ func run(log *slog.Logger, stateDir, listen, chromium, mpv string, devtools int,
 	}
 	bridge := mqtt.New(cfg, k, au.Names, stats, version, webURL, log)
 
-	srv := &web.Server{Config: cfg, Kiosk: k, Browser: br, Player: pl, Audio: au, Cast: rx, MQTT: bridge, Stats: stats, Version: version, Port: port, Log: log}
+	// PIKIOSK_RELEASES is shared with self-update.sh; empty turns checks off.
+	releases, ok := os.LookupEnv("PIKIOSK_RELEASES")
+	if !ok {
+		releases = "XtremeOwnage/pikiosk"
+	}
+	upd := update.New(os.Getenv("PIKIOSK_RELEASES_API"), releases, version, log)
+	upd.SetEnabled(!cfg.Get().UpdateCheck.Disabled)
+	cfg.Subscribe(func(_, c config.Config) { upd.SetEnabled(!c.UpdateCheck.Disabled) })
+	bridge.SetUpdateSource(upd.Status)
+	upd.OnChange(func(st update.Status) {
+		bridge.PublishUpdate()
+		if st.Available {
+			k.Emit("update_available", st.Latest)
+		}
+	})
+
+	srv := &web.Server{Config: cfg, Kiosk: k, Browser: br, Player: pl, Audio: au, Cast: rx, MQTT: bridge, Stats: stats, Version: version, Port: port, Log: log, Update: upd, YouTube: yt}
 	httpSrv := &http.Server{
 		Addr:              listen,
 		Handler:           srv.Handler(),
@@ -125,8 +160,11 @@ func run(log *slog.Logger, stateDir, listen, chromium, mpv string, devtools int,
 	go br.Run(ctx)
 	go pl.Run(ctx)
 	go rx.Run(ctx)
+	go yt.Run(ctx)
 	go k.Run(ctx)
 	go bridge.Run(ctx)
+	go upd.Run(ctx)
+	go autoUpdate(ctx, cfg, upd, k, filepath.Join(stateDir, "auto-update.last"), log)
 
 	errc := make(chan error, 1)
 	go func() {
@@ -208,4 +246,70 @@ func envOr(k, def string) string {
 		return v
 	}
 	return def
+}
+
+// dialPort is where phones reach the YouTube cast receiver.
+const dialPort = 56790
+
+// youtubeUserAgent makes YouTube serve its TV app, which phones pair with.
+const youtubeUserAgent = "Mozilla/5.0 (Linux armeabi-v7a; Android 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36 Cobalt/25.lts.30.1034943-gold (unlike Gecko) v8/8.8.278.17-jit gles Starboard/15, pikiosk_RaspberryPi_2024/1.0 (pikiosk, Kiosk, Wired)"
+
+// youtubeTV runs YouTube's TV app as a web cast for the DIAL receiver.
+type youtubeTV struct {
+	k   *kiosk.Kiosk
+	cfg *config.Store
+}
+
+func (y youtubeTV) Launch(ctx context.Context, url string) error {
+	ua := y.cfg.Get().Cast.YouTubeUserAgent
+	if ua == "" {
+		ua = youtubeUserAgent
+	}
+	return y.k.StartWebCast(ctx, "youtube", url, ua, youtubePlaying)
+}
+
+func (y youtubeTV) Stop(ctx context.Context) error { return y.k.StopWebCast(ctx) }
+func (y youtubeTV) Running() bool                  { return y.k.WebCasting() == "youtube" }
+
+// youtubePlaying reports whether the TV app is on a video rather than its
+// home screen, from its URL (https://www.youtube.com/tv#/watch?v=…).
+func youtubePlaying(url string) bool {
+	return strings.Contains(url, "/watch")
+}
+
+// autoUpdate runs System -> Update once a day inside the configured window.
+// The last start is kept in lastFile so a restart inside the window does
+// not run it twice.
+func autoUpdate(ctx context.Context, cfg *config.Store, upd *update.Checker, k *kiosk.Kiosk, lastFile string, log *slog.Logger) {
+	var last time.Time
+	if b, err := os.ReadFile(lastFile); err == nil {
+		last, _ = time.Parse(time.RFC3339, strings.TrimSpace(string(b)))
+	}
+	upd.SetLastAuto(last)
+	tick := time.NewTicker(time.Minute)
+	defer tick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+		}
+		u := cfg.Get().UpdateCheck
+		now := system.Now()
+		if !u.Auto || u.Disabled || !u.InWindow(now) || now.Sub(last) < 20*time.Hour {
+			continue
+		}
+		if st, err := system.UnitInfo(ctx, system.UpgradeUnit); err == nil && (st.ActiveState == "active" || st.ActiveState == "activating") {
+			continue
+		}
+		if err := system.StartUnit(ctx, system.UpgradeUnit); err != nil {
+			log.Warn("automatic update", "err", err)
+			continue
+		}
+		last = now
+		upd.SetLastAuto(now)
+		_ = os.WriteFile(lastFile, []byte(now.Format(time.RFC3339)+"\n"), 0o600)
+		k.Emit("update", "automatic update started")
+		log.Info("automatic update started")
+	}
 }

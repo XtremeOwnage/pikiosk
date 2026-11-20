@@ -14,6 +14,22 @@ let
     document.title = "token=" + (t ? t.access_token : "none");
     </script></head><body>ha</body></html>
     EOF
+    # Reports the injected CSS and zoom in the title once the page has loaded.
+    cat > $out/css.html <<'EOF'
+    <html><head><title>pending</title><script>
+    addEventListener("load", () => {
+      document.title = "color=" + getComputedStyle(document.body).color + " zoom=" + (document.documentElement.style.zoom || "none");
+    });
+    </script></head><body>css</body></html>
+    EOF
+    # Stands in for YouTube's TV app: reports its launch data and user agent,
+    # then "plays" a video.
+    cat > $out/tv.html <<'EOF'
+    <html><head><title>pending</title><script>
+    document.title = "tv" + location.search + " cobalt=" + navigator.userAgent.includes("Cobalt");
+    location.hash = "#/watch?v=test";
+    </script></head><body>tv</body></html>
+    EOF
     ffmpeg -loglevel error -f lavfi -i testsrc=duration=60:size=320x240:rate=10 -pix_fmt yuv420p -c:v libx264 -f mpegts $out/test.ts
   '';
   # Serves the site; /echo puts the request headers in the page title.
@@ -21,6 +37,22 @@ let
     import functools, html, http.server, sys
     class H(http.server.SimpleHTTPRequestHandler):
         def do_GET(self):
+            if self.path == "/repos/test/pikiosk/releases/latest":
+                body = b'{"tag_name":"v99.0.0","html_url":"http://127.0.0.1:8000/rel","published_at":"2026-11-19T00:00:00Z"}'
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+            if self.path.startswith("/ua"):
+                body = ("<html><head><title>ua=%s</title></head><body>ua</body></html>" % html.escape(self.headers.get("User-Agent", ""))).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
             if not self.path.startswith("/echo"):
                 return super().do_GET()
             t = "hdr=%s auth=%s" % (self.headers.get("X-Test", "none"), self.headers.get("Authorization", "none"))
@@ -41,6 +73,10 @@ pkgs.testers.runNixOSTest {
     services.pikiosk = {
       enable = true;
       sessionEnvironment.WLR_RENDERER = "pixman";
+      # A release version, so the update check can compare against v99.
+      package = pkgs.callPackage ../package.nix { version = "v0.1.0"; };
+      releases = "test/pikiosk";
+      releasesApi = "http://127.0.0.1:8000";
     };
     virtualisation = {
       memorySize = 3072;
@@ -50,6 +86,7 @@ pkgs.testers.runNixOSTest {
         "-audiodev none,id=snd0" "-device intel-hda" "-device hda-output,audiodev=snd0"
       ];
     };
+    systemd.services.pikiosk.environment.PIKIOSK_YOUTUBE_TV = "http://127.0.0.1:8000/tv.html";
     services.mosquitto = {
       enable = true;
       listeners = [{
@@ -119,6 +156,8 @@ pkgs.testers.runNixOSTest {
                 {"name": "two", "type": "web", "url": "http://127.0.0.1:8000/two.html"},
                 {"name": "ha", "type": "web", "url": "http://127.0.0.1:8000/ha.html", "ha_token": "secret-token"},
                 {"name": "video", "type": "stream", "url": "http://127.0.0.1:8000/test.ts"},
+                {"name": "css", "type": "web", "url": "http://127.0.0.1:8000/css.html",
+                 "css": "body { color: rgb(1, 2, 3) !important; }", "zoom": 1.5},
                 {"name": "hdr", "type": "web", "url": "http://127.0.0.1:8000/echo",
                  "auth": {"type": "basic", "username": "kiosk", "password": "pw"},
                  "headers": [{"name": "X-Test", "value": "hello"}]},
@@ -142,6 +181,10 @@ pkgs.testers.runNixOSTest {
         api("POST", "/api/view", {"name": "ha"})
         wait_title("token=secret-token")
         assert "secret-token" not in api("GET", "/api/config")
+
+    with subtest("custom CSS and zoom are applied to the view"):
+        api("POST", "/api/view", {"name": "css"})
+        wait_title("color=rgb(1, 2, 3) zoom=1.5")
 
     with subtest("view headers and basic auth reach the view's origin"):
         api("POST", "/api/view", {"name": "hdr"})
@@ -169,7 +212,7 @@ pkgs.testers.runNixOSTest {
         })
         kiosk.wait_until_succeeds(f"{C} http://127.0.0.1/api/state | jq -e '.mqtt == \"connected\"'", timeout=60)
         disc = json.loads(kiosk.succeed("mosquitto_sub -h 127.0.0.1 -t 'homeassistant/device/+/config' -C 1 -W 10"))
-        assert disc["components"]["view"]["options"] == ["one", "two", "ha", "video", "hdr"], disc
+        assert disc["components"]["view"]["options"] == ["one", "two", "ha", "video", "css", "hdr"], disc
         assert kiosk.succeed("mosquitto_sub -h 127.0.0.1 -t pikiosk/test/availability -C 1 -W 10").strip() == "online"
 
     with subtest("MQTT view with duration reverts"):
@@ -313,6 +356,55 @@ pkgs.testers.runNixOSTest {
         kiosk.fail(f"mosquitto_sub -h 127.0.0.1 -t {topic} -C 1 -W 3")
         api("POST", "/api/mqtt/discovery")
         kiosk.succeed(f"mosquitto_sub -h 127.0.0.1 -t {topic} -C 1 -W 5")
+
+    with subtest("update check reports a newer release and can be turned off"):
+        st = json.loads(api("POST", "/api/update/check"))
+        assert st["available"] and st["latest"] == "v99.0.0", st
+        upd = json.loads(kiosk.succeed("mosquitto_sub -h 127.0.0.1 -t pikiosk/test/update -C 1 -W 10"))
+        assert upd["latest_version"] == "v99.0.0", upd
+        disc = json.loads(kiosk.succeed("mosquitto_sub -h 127.0.0.1 -t 'homeassistant/device/+/config' -C 1 -W 10"))
+        assert disc["components"]["update"]["p"] == "update", disc["components"].get("update")
+        api("PUT", "/api/config/update_check", {"disabled": True})
+        st = json.loads(api("GET", "/api/update"))
+        assert not st["enabled"] and not st["available"], st
+        kiosk.fail(f"{C} -X POST http://127.0.0.1/api/update/check")
+        kiosk.wait_until_succeeds("mosquitto_sub -h 127.0.0.1 -t 'homeassistant/device/+/config' -C 1 -W 5 | jq -e '.components.update == null'", timeout=15)
+        api("PUT", "/api/config/update_check", {"disabled": False})
+
+    with subtest("automatic update runs inside its window"):
+        now = kiosk.succeed("date +%H:%M").strip()
+        later = kiosk.succeed("date -d '+30 min' +%H:%M").strip()
+        api("PUT", "/api/config/update_check", {"disabled": False, "auto": True, "auto_from": now, "auto_to": later})
+        kiosk.wait_until_succeeds(f"{C} http://127.0.0.1/api/events | jq -e 'map(select(.message == \"automatic update started\")) | length > 0'", timeout=100)
+        st = json.loads(api("GET", "/api/update"))
+        assert st.get("last_auto"), st
+        api("PUT", "/api/config/update_check", {"disabled": False, "auto": False})
+
+    with subtest("YouTube cast button: DIAL launch shows the TV app and stop goes back"):
+        cfg = json.loads(api("GET", "/api/config"))
+        api("PUT", "/api/config/cast", dict(cfg["cast"], youtube=True))
+        api("POST", "/api/view", {"name": "one"})
+        wait_title("pikiosk test page")
+        kiosk.wait_until_succeeds("curl -sf http://127.0.0.1:56790/dd.xml | grep -q friendlyName", timeout=15)
+        kiosk.succeed("curl -sfI http://127.0.0.1:56790/dd.xml | grep -qi '^Application-URL: http://127.0.0.1:56790/apps/'")
+        kiosk.succeed("curl -sf http://127.0.0.1:56790/apps/YouTube | grep -q '<state>stopped</state>'")
+        code = kiosk.succeed("curl -s -o /dev/null -w '%{http_code}' -X POST -d 'pairingCode=abc-123&theme=cl' http://127.0.0.1:56790/apps/YouTube").strip()
+        assert code == "201", code
+        wait_title("tv?pairingCode=abc-123&theme=cl cobalt=true")
+        st = json.loads(api("GET", "/api/state"))["state"]
+        assert st["casting"] and st["cast_source"] == "youtube" and "abc-123" not in st["url"], st
+        kiosk.succeed("curl -sf http://127.0.0.1:56790/apps/YouTube | grep -q '<state>running</state>'")
+        kiosk.fail("curl -sf -X POST -H 'Origin: https://evil.example' http://127.0.0.1:56790/apps/YouTube")
+        kiosk.succeed("curl -sf -X DELETE http://127.0.0.1:56790/apps/YouTube/run")
+        wait_title("pikiosk test page")
+        st = json.loads(api("GET", "/api/state"))["state"]
+        assert not st["casting"], st
+        # The next page gets Chromium's own user agent back.
+        api("POST", "/api/url", {"url": "http://127.0.0.1:8000/ua"})
+        wait_title("ua=")
+        assert "Cobalt" not in titles(), titles()
+        api("POST", "/api/view", {"name": "one"})
+        wait_title("pikiosk test page")
 
     with subtest("sounds: library, playback and activity events over MQTT"):
         sounds = json.loads(kiosk.succeed("mosquitto_sub -h 127.0.0.1 -t pikiosk/test/sounds -C 1 -W 10"))

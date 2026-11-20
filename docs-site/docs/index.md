@@ -17,6 +17,9 @@ It needs no cloud services, accounts or telemetry. Everything it does stays on y
 
 [Install it](getting-started/installation.md){ .md-button .md-button--primary } [REST API](reference/rest-api.md){ .md-button }
 
+![The Control page: what is showing, quick commands and a live preview of the screen](assets/screenshots/control-light.png#only-light)
+![The Control page: what is showing, quick commands and a live preview of the screen](assets/screenshots/control-dark.png#only-dark)
+
 ## What it can do
 
 | | |

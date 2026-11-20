@@ -1,0 +1,9 @@
+# Debian packages pikiosk needs on Raspberry Pi OS (trixie, arm64). Used by
+# install.sh and by preinstall.sh, which bakes them into the release image.
+sway swayidle chromium mpv
+pipewire pipewire-pulse wireplumber
+gmediarender gstreamer1.0-pulseaudio gstreamer1.0-plugins-good
+uxplay gstreamer1.0-plugins-bad gstreamer1.0-libav
+greetd ddcutil jq curl ca-certificates
+avahi-daemon network-manager polkitd
+fonts-dejavu-core fonts-liberation fonts-noto-color-emoji

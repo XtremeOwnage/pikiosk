@@ -51,6 +51,9 @@ For pages you come back to often, switch on **Keep loaded in the background** in
 
 ## Editing
 
+![The Rotations page: steps with their own switches, cycle length and the boot rotation](../assets/screenshots/rotations-light.png#only-light)
+![The Rotations page: steps with their own switches, cycle length and the boot rotation](../assets/screenshots/rotations-dark.png#only-dark)
+
 Each rotation is a card with its steps. A step is a view and the seconds it stays on screen. The card shows how many steps are active and how long one cycle takes.
 
 | Control | |

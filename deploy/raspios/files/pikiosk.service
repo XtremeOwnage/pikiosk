@@ -6,6 +6,8 @@ StartLimitIntervalSec=0
 [Service]
 User=@KIOSK_USER@
 EnvironmentFile=/etc/default/pikiosk
+# PIKIOSK_RELEASES: the GitHub repo checked for new releases.
+EnvironmentFile=-/etc/default/pikiosk-update
 ExecStart=/usr/local/bin/kioskd
 Type=notify
 NotifyAccess=main

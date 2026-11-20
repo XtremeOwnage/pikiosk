@@ -7,6 +7,14 @@ description: Release notes.
 
 ## Unreleased
 
+- YouTube cast button: the kiosk appears in the YouTube app's cast menu (DIAL) and plays through YouTube's TV app, then goes back to what was showing.
+- Release check: twice a day the kiosk asks GitHub for a newer release, shows an Up to date or Update available tag with an Update now button, and a Home Assistant update entity. Can be turned off.
+- Automatic updates inside a chosen time window and days, at most once a day.
+- Schedules (sleep and automatic updates) follow a timezone change right away instead of after a restart.
+- The Sound & cast card shows whether phones' YouTube searches reach the kiosk, to spot VLAN problems.
+- The release image has every package installed, so the first boot needs no internet.
+- `self-update.sh` only installs a release that is newer than what is running.
+- Screenshots throughout the documentation.
 - Redesigned web UI: sidebar navigation, switches, a side panel to configure each view, and a status overview on the Control page.
 - Views: a rotation switch on every row, the full URL visible, reorder and save without a separate save step. Renaming a view updates the rotations that use it.
 - Rotations: skip a single step without removing it, cycle length shown, unsaved-changes bar.

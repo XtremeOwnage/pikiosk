@@ -20,6 +20,7 @@ import (
 	"github.com/XtremeOwnage/pikiosk/internal/config"
 	"github.com/XtremeOwnage/pikiosk/internal/kiosk"
 	"github.com/XtremeOwnage/pikiosk/internal/system"
+	"github.com/XtremeOwnage/pikiosk/internal/update"
 )
 
 const (
@@ -43,7 +44,7 @@ type Command struct {
 // Actions lists every command action, for documentation and the UI.
 var Actions = []string{
 	"view", "url", "stream", "stop_stream", "reload", "restart_browser",
-	"rotation", "resume_rotation", "stop_rotation", "next",
+	"rotation", "resume_rotation", "stop_rotation", "next", "install_update", "stop_cast",
 	"play_sound", "stop_sound", "volume", "list_sounds",
 	"screen", "wake", "brightness", "reboot",
 }
@@ -61,6 +62,39 @@ type Bridge struct {
 	client paho.Client
 	conf   config.Config
 	status string
+	update func() update.Status
+}
+
+// SetUpdateSource gives the bridge the release check, published to
+// <base>/update for Home Assistant's update entity.
+func (b *Bridge) SetUpdateSource(fn func() update.Status) {
+	b.mu.Lock()
+	b.update = fn
+	b.mu.Unlock()
+}
+
+// PublishUpdate sends the release check result, retained.
+func (b *Bridge) PublishUpdate() {
+	b.mu.Lock()
+	c, base, fn := b.client, b.conf.MQTT.BaseTopic, b.update
+	b.mu.Unlock()
+	if c == nil || !c.IsConnected() || fn == nil {
+		return
+	}
+	data, _ := json.Marshal(updatePayload(fn(), b.version))
+	c.Publish(base+"/update", 1, true, data)
+}
+
+func updatePayload(st update.Status, installed string) map[string]any {
+	latest := st.Latest
+	if !st.Available {
+		latest = installed
+	}
+	p := map[string]any{"installed_version": installed, "latest_version": latest, "title": "pikiosk"}
+	if st.URL != "" {
+		p["release_url"] = st.URL
+	}
+	return p
 }
 
 // New creates the bridge. sounds lists the sound library; stats returns
@@ -81,7 +115,7 @@ func (b *Bridge) Run(ctx context.Context) {
 			b.reconnect(cfg)
 			return
 		}
-		if old.DeviceName != cfg.DeviceName ||
+		if old.DeviceName != cfg.DeviceName || old.UpdateCheck.Disabled != cfg.UpdateCheck.Disabled || old.Cast.YouTube != cfg.Cast.YouTube ||
 			strings.Join(old.ViewNames(), "\x00") != strings.Join(cfg.ViewNames(), "\x00") ||
 			strings.Join(old.RotationNames(), "\x00") != strings.Join(cfg.RotationNames(), "\x00") {
 			b.mu.Lock()
@@ -178,6 +212,7 @@ func (b *Bridge) reconnect(cfg config.Config) {
 		b.publishDiscovery(c, conf)
 		b.publishState(b.kiosk.State())
 		b.PublishSounds()
+		go b.PublishUpdate()
 	})
 	opts.SetConnectionLostHandler(func(_ paho.Client, err error) {
 		b.mu.Lock()
@@ -344,6 +379,11 @@ func Execute(ctx context.Context, k *kiosk.Kiosk, cmd Command) error {
 	case "reboot":
 		k.Emit("reboot", "requested")
 		return system.Reboot(ctx)
+	case "stop_cast":
+		return k.StopWebCast(ctx)
+	case "install_update":
+		k.Emit("update", "install requested")
+		return system.StartUnit(ctx, system.UpgradeUnit)
 	default:
 		return fmt.Errorf("unknown action %q", cmd.Action)
 	}
@@ -444,6 +484,7 @@ func (b *Bridge) RepublishDiscovery() (string, error) {
 	}
 	b.publishState(b.kiosk.State())
 	b.PublishSounds()
+	b.PublishUpdate()
 	return DiscoveryTopic(conf), nil
 }
 
@@ -456,7 +497,7 @@ func (b *Bridge) ClearRetained() ([]string, error) {
 		return nil, err
 	}
 	base := conf.MQTT.BaseTopic
-	topics := []string{DiscoveryTopic(conf), base + "/state", base + "/sounds", base + "/availability"}
+	topics := []string{DiscoveryTopic(conf), base + "/state", base + "/sounds", base + "/update", base + "/availability"}
 	for _, t := range topics {
 		if err := wait(c.Publish(t, 1, true, []byte{})); err != nil {
 			return nil, fmt.Errorf("%s: %w", t, err)
@@ -563,6 +604,11 @@ func Discovery(cfg config.Config, version, webURL string) map[string]any {
 		"state_topic": state, "value_template": "{{ value_json.last_activity }}", "device_class": "timestamp",
 		"entity_category": "diagnostic",
 	}))
+	if cfg.Cast.YouTube {
+		add(cmp("button", "stop_cast", "Stop casting", map[string]any{
+			"command_topic": base + "/cmd/stop_cast", "icon": "mdi:cast-off",
+		}))
+	}
 	add(cmp("button", "reload", "Reload", map[string]any{
 		"command_topic": base + "/cmd/reload", "icon": "mdi:refresh",
 	}))
@@ -572,6 +618,12 @@ func Discovery(cfg config.Config, version, webURL string) map[string]any {
 	add(cmp("button", "restart_browser", "Restart browser", map[string]any{
 		"command_topic": base + "/cmd/restart_browser", "entity_category": "config", "icon": "mdi:restart",
 	}))
+	if !cfg.UpdateCheck.Disabled {
+		add(cmp("update", "update", "pikiosk", map[string]any{
+			"state_topic": base + "/update", "command_topic": base + "/cmd/install_update",
+			"payload_install": "install", "device_class": "firmware", "entity_category": "config",
+		}))
+	}
 	add(cmp("button", "reboot", "Reboot", map[string]any{
 		"command_topic": base + "/cmd/reboot", "device_class": "restart", "entity_category": "config",
 	}))

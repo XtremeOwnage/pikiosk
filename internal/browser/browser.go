@@ -44,6 +44,8 @@ type Page struct {
 	// Keep leaves the page loaded in a background tab after another page is
 	// shown, so coming back to it is instant and it stays live.
 	Keep bool
+	// UserAgent overrides the browser's user agent for this page.
+	UserAgent string
 }
 
 // same reports whether a and b load the same thing; Keep does not count.
@@ -61,6 +63,7 @@ type tab struct {
 	conn    *cdp
 	page    Page
 	loaded  bool
+	ua      string // user agent override in effect
 	scripts []string
 	crashed chan struct{}
 	used    time.Time
@@ -73,15 +76,16 @@ type Browser struct {
 	// switchMu serialises Show and Preload, which create and swap tabs.
 	switchMu sync.Mutex
 
-	mu       sync.Mutex
-	front    *tab
-	swapped  chan struct{}
-	bg       []*tab
-	proc     *os.Process
-	page     Page
-	running  bool
-	lastErr  string
-	restarts int
+	mu        sync.Mutex
+	front     *tab
+	swapped   chan struct{}
+	defaultUA string
+	bg        []*tab
+	proc      *os.Process
+	page      Page
+	running   bool
+	lastErr   string
+	restarts  int
 }
 
 func New(opts Options, log *slog.Logger) *Browser {
@@ -534,6 +538,26 @@ func (b *Browser) closeTab(ctx context.Context, t *tab) {
 	}
 }
 
+// defaultUserAgent is Chromium's own user agent, used to undo an override.
+func (b *Browser) defaultUserAgent(ctx context.Context) (string, error) {
+	b.mu.Lock()
+	ua := b.defaultUA
+	b.mu.Unlock()
+	if ua != "" {
+		return ua, nil
+	}
+	var res struct {
+		UserAgent string `json:"userAgent"`
+	}
+	if err := b.browserCall(ctx, "Browser.getVersion", nil, &res); err != nil {
+		return "", err
+	}
+	b.mu.Lock()
+	b.defaultUA = res.UserAgent
+	b.mu.Unlock()
+	return res.UserAgent, nil
+}
+
 // closeOthers closes page targets left over from an earlier connection, so
 // the attached tab is the only one and therefore the visible one.
 func (b *Browser) closeOthers(ctx context.Context, keepID string) {
@@ -572,6 +596,21 @@ func (b *Browser) apply(ctx context.Context, t *tab, page Page) error {
 	b.mu.Unlock()
 	for _, id := range old {
 		_ = conn.Call(ctx, "Page.removeScriptToEvaluateOnNewDocument", map[string]any{"identifier": id}, nil)
+	}
+
+	if page.UserAgent != t.ua {
+		ua := page.UserAgent
+		if ua == "" {
+			def, err := b.defaultUserAgent(ctx)
+			if err != nil {
+				return err
+			}
+			ua = def
+		}
+		if err := conn.Call(ctx, "Emulation.setUserAgentOverride", map[string]any{"userAgent": ua}, nil); err != nil {
+			return err
+		}
+		t.ua = page.UserAgent
 	}
 
 	if len(page.Headers) > 0 {

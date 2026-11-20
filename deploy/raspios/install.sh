@@ -9,20 +9,23 @@ user=${PIKIOSK_USER:-kiosk}
 f=$here/files
 
 export DEBIAN_FRONTEND=noninteractive
-# On first boot the network may still be coming up.
-for i in $(seq 1 60); do
-  apt-get update && break
-  echo "apt-get update failed, retrying ($i)"
-  sleep 10
+mapfile -t pkgs < <(grep -v '^#' "$here/packages.txt" | tr ' ' '\n' | grep .)
+missing=()
+for p in "${pkgs[@]}"; do
+  dpkg-query -W -f='${Status}' "$p" 2>/dev/null | grep -q 'ok installed' || missing+=("$p")
 done
-apt-get install -y --no-install-recommends \
-  sway swayidle chromium mpv \
-  pipewire pipewire-pulse wireplumber \
-  gmediarender gstreamer1.0-pulseaudio gstreamer1.0-plugins-good \
-  uxplay gstreamer1.0-plugins-bad gstreamer1.0-libav \
-  greetd ddcutil jq curl ca-certificates \
-  avahi-daemon network-manager polkitd \
-  fonts-dejavu-core fonts-liberation fonts-noto-color-emoji
+# The release image has every package already, so a first boot without
+# internet goes straight on. Otherwise fetch what is missing.
+if [ ${#missing[@]} -gt 0 ]; then
+  echo "installing: ${missing[*]}"
+  # On first boot the network may still be coming up.
+  for i in $(seq 1 60); do
+    apt-get update && break
+    echo "apt-get update failed, retrying ($i)"
+    sleep 10
+  done
+  apt-get install -y --no-install-recommends "${missing[@]}"
+fi
 
 # Unprivileged account that owns the display session and runs kioskd.
 if ! id "$user" >/dev/null 2>&1; then

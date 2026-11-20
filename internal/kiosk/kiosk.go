@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/url"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/XtremeOwnage/pikiosk/internal/config"
 	"github.com/XtremeOwnage/pikiosk/internal/display"
 	"github.com/XtremeOwnage/pikiosk/internal/player"
+	"github.com/XtremeOwnage/pikiosk/internal/system"
 )
 
 type Mode string
@@ -45,8 +47,11 @@ type State struct {
 	Sound  string `json:"sound"`
 	Volume int    `json:"volume"`
 
-	// Casting is true while an AirPlay client is connected.
+	// Casting is true while a phone or computer is casting: AirPlay, or
+	// YouTube's TV app launched from a phone.
 	Casting bool `json:"casting"`
+	// CastSource is "airplay" or "youtube" while casting.
+	CastSource string `json:"cast_source,omitempty"`
 }
 
 // Event is one entry in the activity feed.
@@ -75,6 +80,8 @@ type target struct {
 	url  string
 	mode Mode
 	page browser.Page
+	// cast names the web cast this target belongs to ("youtube").
+	cast string
 }
 
 type Kiosk struct {
@@ -96,6 +103,9 @@ type Kiosk struct {
 	events    []Event
 	schedOff  *bool // last schedule state acted on
 	rot       rotation
+	airplay   bool
+	webCast   string             // source of the running web cast
+	castIdle  context.CancelFunc // stops the web cast idle watcher
 }
 
 // New creates the kiosk. welcomeURL is shown while no default view is set.
@@ -220,7 +230,7 @@ func (k *Kiosk) Run(ctx context.Context) {
 					}
 				}
 			}
-			k.checkSleep(ctx, time.Now())
+			k.checkSleep(ctx, system.Now())
 		}
 	}
 }
@@ -632,6 +642,7 @@ func (k *Kiosk) show(ctx context.Context, t target, d time.Duration, refreshSeco
 }
 
 func (k *Kiosk) present(ctx context.Context, t target, refreshSeconds int) error {
+	k.endWebCastIfReplaced(t)
 	switch t.mode {
 	case ModeStream:
 		if err := k.player.Play(t.url); err != nil {
@@ -760,8 +771,9 @@ func (k *Kiosk) SetBrightness(ctx context.Context, percent int) error {
 // receiver's window covers the screen while it is connected.
 func (k *Kiosk) SetCasting(ctx context.Context, active bool) {
 	k.mu.Lock()
-	changed := k.state.Casting != active
-	k.state.Casting = active
+	changed := k.airplay != active
+	k.airplay = active
+	k.updateCastStateLocked()
 	k.mu.Unlock()
 	if !changed {
 		return
@@ -776,6 +788,114 @@ func (k *Kiosk) SetCasting(ctx context.Context, active bool) {
 	}
 	k.touch()
 	k.publish()
+}
+
+func (k *Kiosk) updateCastStateLocked() {
+	k.state.Casting = k.airplay || k.webCast != ""
+	switch {
+	case k.webCast != "":
+		k.state.CastSource = k.webCast
+	case k.airplay:
+		k.state.CastSource = "airplay"
+	default:
+		k.state.CastSource = ""
+	}
+}
+
+// webCastMax ends a web cast that nobody stopped.
+const webCastMax = 4 * time.Hour
+
+// WebCastIdle ends a web cast whose page has not been playing for this long.
+var WebCastIdle = 2 * time.Minute
+
+// StartWebCast shows a cast page (YouTube's TV app) over whatever is
+// showing; the rotation pauses. It ends with StopWebCast, when the page
+// stops playing for WebCastIdle, or when something else is shown. playing
+// reports from the page URL whether media is playing.
+func (k *Kiosk) StartWebCast(ctx context.Context, source, url, userAgent string, playing func(url string) bool) error {
+	// State and events show the address without the phone's pairing code.
+	shown, _, _ := strings.Cut(url, "?")
+	t := target{mode: ModeWeb, url: shown, page: browser.Page{URL: url, UserAgent: userAgent}, cast: source}
+	if err := k.show(ctx, t, webCastMax, 0); err != nil {
+		return err
+	}
+	k.mu.Lock()
+	fresh := k.webCast == ""
+	k.webCast = source
+	k.updateCastStateLocked()
+	if k.castIdle != nil {
+		k.castIdle()
+	}
+	ictx, cancel := context.WithCancel(context.Background())
+	k.castIdle = cancel
+	k.mu.Unlock()
+	if fresh {
+		k.Emit("cast_started", source)
+	}
+	k.publish()
+	go k.watchWebCast(ictx, playing)
+	return nil
+}
+
+func (k *Kiosk) watchWebCast(ctx context.Context, playing func(string) bool) {
+	last := time.Now()
+	tick := time.NewTicker(5 * time.Second)
+	defer tick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+		}
+		cctx, cancel := context.WithTimeout(ctx, 4*time.Second)
+		u, err := k.browser.CurrentURL(cctx)
+		cancel()
+		if err == nil && playing(u) {
+			last = time.Now()
+			continue
+		}
+		if time.Since(last) > WebCastIdle {
+			k.Emit("cast_idle", "nothing played for "+WebCastIdle.String())
+			_ = k.StopWebCast(context.Background())
+			return
+		}
+	}
+}
+
+// WebCasting returns the source of the running web cast, or "".
+func (k *Kiosk) WebCasting() string {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	return k.webCast
+}
+
+// StopWebCast ends the web cast and goes back to what was showing.
+func (k *Kiosk) StopWebCast(ctx context.Context) error {
+	k.mu.Lock()
+	if k.webCast == "" {
+		k.mu.Unlock()
+		return nil
+	}
+	k.mu.Unlock()
+	return k.returnToBase(ctx)
+}
+
+// endWebCastIfReplaced clears the web cast when something else is shown.
+func (k *Kiosk) endWebCastIfReplaced(t target) {
+	k.mu.Lock()
+	src := k.webCast
+	if src == "" || t.cast == src {
+		k.mu.Unlock()
+		return
+	}
+	k.webCast = ""
+	if k.castIdle != nil {
+		k.castIdle()
+		k.castIdle = nil
+	}
+	k.updateCastStateLocked()
+	k.mu.Unlock()
+	k.Emit("cast_ended", src)
 }
 
 // Activity records user input on the touchscreen, mouse or keyboard.

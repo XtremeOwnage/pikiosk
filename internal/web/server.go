@@ -22,10 +22,12 @@ import (
 	"github.com/XtremeOwnage/pikiosk/internal/browser"
 	"github.com/XtremeOwnage/pikiosk/internal/cast"
 	"github.com/XtremeOwnage/pikiosk/internal/config"
+	"github.com/XtremeOwnage/pikiosk/internal/dial"
 	"github.com/XtremeOwnage/pikiosk/internal/kiosk"
 	"github.com/XtremeOwnage/pikiosk/internal/mqtt"
 	"github.com/XtremeOwnage/pikiosk/internal/player"
 	"github.com/XtremeOwnage/pikiosk/internal/system"
+	"github.com/XtremeOwnage/pikiosk/internal/update"
 )
 
 //go:embed static
@@ -45,6 +47,8 @@ type Server struct {
 	Audio   *audio.Player
 	Cast    *cast.Receiver
 	MQTT    *mqtt.Bridge
+	Update  *update.Checker
+	YouTube interface{ Status() dial.Status }
 	Stats   func() map[string]any
 	Version string
 	Port    string
@@ -96,6 +100,7 @@ func (s *Server) Handler() http.Handler {
 	api("POST /api/rotation/resume", s.cmdShortcut("resume_rotation"))
 	api("POST /api/rotation/stop", s.cmdShortcut("stop_rotation"))
 	api("POST /api/rotation/next", s.cmdShortcut("next"))
+	api("POST /api/cast/stop", s.cmdShortcut("stop_cast"))
 	api("POST /api/sound/play", s.cmdShortcut("play_sound"))
 	api("POST /api/sound/stop", s.cmdShortcut("stop_sound"))
 	api("POST /api/volume", s.cmdShortcut("volume"))
@@ -120,6 +125,9 @@ func (s *Server) Handler() http.Handler {
 	api("PUT /api/config/display", s.putDisplay)
 	api("PUT /api/config/sleep", s.putSleep)
 	api("PUT /api/config/oidc", s.putOIDC)
+	api("PUT /api/config/update_check", s.putUpdateCheck)
+	api("GET /api/update", s.getUpdate)
+	api("POST /api/update/check", s.checkUpdate)
 	api("POST /api/password", s.changePassword)
 	api("POST /api/token", s.regenerateToken)
 
@@ -358,6 +366,8 @@ func (s *Server) getState(w http.ResponseWriter, r *http.Request) {
 		"player":  map[string]any{"playing": playing, "url": player.Redact(url), "last_error": s.Player.LastError()},
 		"mqtt":    s.MQTT.Status(),
 		"cast":    s.Cast.Status(),
+		"update":  s.Update.Status(),
+		"youtube": s.youtubeStatus(),
 		"device":  s.Stats(),
 	})
 }
@@ -684,6 +694,35 @@ func (s *Server) clearRetained(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]any{"topics": topics})
+}
+
+func (s *Server) youtubeStatus() any {
+	if s.YouTube == nil {
+		return nil
+	}
+	return s.YouTube.Status()
+}
+
+func (s *Server) putUpdateCheck(w http.ResponseWriter, r *http.Request) {
+	var u config.UpdateCheck
+	if !decode(w, r, &u) {
+		return
+	}
+	s.update(w, func(c *config.Config) error { c.UpdateCheck = u; return nil })
+}
+
+func (s *Server) getUpdate(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, s.Update.Status())
+}
+
+func (s *Server) checkUpdate(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
+	defer cancel()
+	if err := s.Update.Check(ctx); err != nil {
+		writeErr(w, http.StatusBadGateway, err)
+		return
+	}
+	writeJSON(w, s.Update.Status())
 }
 
 func (s *Server) putDisplay(w http.ResponseWriter, r *http.Request) {

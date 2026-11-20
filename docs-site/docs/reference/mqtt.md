@@ -30,6 +30,8 @@ Simple topics take the value as the payload:
 | `…/cmd/screen` | `ON` / `OFF` |
 | `…/cmd/brightness` | `0`-`100` |
 | `…/cmd/reload`, `…/cmd/restart_browser`, `…/cmd/reboot` | anything |
+| `…/cmd/stop_cast` | anything (ends a YouTube cast) |
+| `…/cmd/install_update` | anything (same as System → Update; Home Assistant's update entity sends `install`) |
 
 `…/cmd` takes JSON for the same actions, with extra parameters:
 
@@ -54,6 +56,7 @@ Simple topics take the value as the payload:
 | `…/state` | JSON state, retained: mode, view, URL, rotation, sound, screen, brightness, volume, casting and device health. |
 | `…/event` | Activity feed, one JSON message per event: views shown, rotation changes, sounds, casting, screen, errors, watchdog actions. |
 | `…/sounds` | Sound library as a JSON list (retained). |
+| `…/update` | Release check for Home Assistant's update entity, retained: `installed_version`, `latest_version`, `release_url`. |
 | `…/error` | Message for the last failed command. |
 
 ## Home Assistant discovery

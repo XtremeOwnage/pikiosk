@@ -10,14 +10,15 @@ permissions:
 
 jobs:
   release:
-    runs-on: ubuntu-24.04
+    # Native arm64, so packages install into the image without emulation.
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
       - name: Tools
-        run: sudo apt-get update && sudo apt-get install -y mtools xz-utils
+        run: sudo apt-get update && sudo apt-get install -y mtools xz-utils fdisk e2fsprogs
       - name: Test
         run: go test ./...
       - name: Version
@@ -31,6 +32,9 @@ jobs:
         run: |
           curl -fsSL -o raspios.img.xz https://downloads.raspberrypi.com/raspios_lite_arm64_latest
           xz -d raspios.img.xz
+          # Bake in every package, so the first boot needs no internet.
+          sudo deploy/raspios/preinstall.sh raspios.img
+          sudo chown "$(id -u):$(id -g)" raspios.img
           deploy/raspios/build-image.sh raspios.img "" UTC
           xz -T0 -6 -c raspios.img > "dist/pikiosk-${VERSION}-raspios-arm64.img.xz"
       - name: Checksums

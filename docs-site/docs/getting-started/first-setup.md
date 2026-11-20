@@ -9,7 +9,10 @@ Open the address shown on the kiosk's screen (for example `http://pikiosk.local`
 
 ## Admin password
 
-The first visit asks for an admin password of at least 8 characters. It protects the web UI. The REST API uses a separate token.
+The first visit asks for an admin password of at least 8 characters. It protects the web UI. The REST API uses a separate token. Once [single sign-on](../guides/single-sign-on.md) is set up, the login page also offers it.
+
+![The login page with the single sign-on button](../assets/screenshots/login-light.png#only-light)
+![The login page with the single sign-on button](../assets/screenshots/login-dark.png#only-dark)
 
 !!! warning
     Until the password is set, anyone on your network can open the setup page. Do the first setup on a network you trust.
@@ -27,7 +30,12 @@ The first visit asks for an admin password of at least 8 characters. It protects
 | **Display & sleep** | Rotation, scale, brightness, cursor, idle timeout and schedule. See [Display and sleep](../guides/display-and-sleep.md). |
 | **System** | Device name and ID, timezone, updates, reboot, password and API token. |
 
-**API docs** in the header opens the [REST API reference](../reference/rest-api.md) served by the kiosk itself.
+The **Network** tab shows each interface with its address, gateway and DNS, and switches between DHCP and a static address. Wi-Fi networks can be scanned and joined there too.
+
+![The Network page](../assets/screenshots/network-light.png#only-light)
+![The Network page](../assets/screenshots/network-dark.png#only-dark)
+
+**API docs** in the sidebar opens the [REST API reference](../reference/rest-api.md) served by the kiosk itself.
 
 ## A typical setup
 

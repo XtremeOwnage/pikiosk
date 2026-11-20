@@ -46,6 +46,9 @@ The **Home Assistant discovery** card on the MQTT page has:
 - **Republish now**, which sends discovery, state, sound list and availability again
 - **Clear retained messages**, which deletes them from the broker. Home Assistant removes the device until it is published again, by Republish or the next reconnect. Use it to start fresh after renaming the device ID, or before removing a kiosk.
 
+![The MQTT page with the Home Assistant discovery card](../assets/screenshots/mqtt-light.png#only-light)
+![The MQTT page with the Home Assistant discovery card](../assets/screenshots/mqtt-dark.png#only-dark)
+
 If the device does not appear, check that the broker user may publish to `homeassistant/#`, and look for `discovery published` or `discovery publish failed` in `journalctl -u pikiosk`.
 
 ## Dashboards without a login

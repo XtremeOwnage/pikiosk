@@ -175,6 +175,7 @@ async function loadConfig() {
   fillForm($("#general-form"), config);
   fillForm($("#cast-form"), config.cast || {});
   fillOIDC();
+  renderUpdateSettings();
   renderTopics();
   if (!rotationsDirty) renderRotations();
   $("#volume-save").checked = (config.audio || {}).volume >= 0;
@@ -234,7 +235,7 @@ async function refreshState() {
   const dev = s.device || {};
   const browser = s.browser.connected ? "connected" : s.browser.running ? "starting" : "stopped";
   setBrand(s.browser.connected, st.screen ? "screen on" : "screen off");
-  const showing = st.casting ? "AirPlay" : st.view || (st.mode === "stream" ? "Stream" : st.url ? "URL" : "—");
+  const showing = st.casting ? (st.cast_source === "youtube" ? "YouTube" : "AirPlay") : st.view || (st.mode === "stream" ? "Stream" : st.url ? "URL" : "—");
   const tiles = [
     tile("Showing", showing, st.casting ? "a device is casting" : st.url || "", "wide"),
     tile("Rotation", st.rotation || "—", st.rotation ? (st.rotation_active ? `running, step ${st.rotation_index + 1}` : "stopped") : ""),
@@ -261,9 +262,20 @@ async function refreshState() {
   }
   const c = s.cast || {};
   const cs = $("#cast-status");
-  cs.textContent = !c.available ? "not installed" : !c.enabled ? "off" : c.active ? "casting" : c.running ? "ready" : "starting";
-  cs.className = "badge " + (c.active || (c.enabled && c.running) ? "ok" : c.enabled ? "bad" : "");
+  const src = st.cast_source;
+  cs.textContent = src === "youtube" ? "casting YouTube" : !c.available ? "AirPlay not installed" : !c.enabled ? "AirPlay off" : c.active ? "casting AirPlay" : c.running ? "ready" : "starting";
+  cs.className = "badge " + (src || (c.enabled && c.running) ? "ok" : c.enabled ? "bad" : "");
+  $("#cast-stop").hidden = src !== "youtube";
+  const yt = s.youtube || {};
+  let ytText = "";
+  if (yt.enabled && yt.last_search) {
+    ytText = "YouTube: a phone at " + yt.search_from + " last looked for TVs " + new Date(yt.last_search).toLocaleString() + ".";
+  } else if (yt.enabled) {
+    ytText = "YouTube: no phone has looked for TVs here yet. Phones find the kiosk over SSDP, which stays inside one network: put the phone on the same Wi-Fi network or VLAN as the kiosk, or forward SSDP between them.";
+  }
+  $("#yt-discovery").textContent = ytText;
   cs.title = c.last_error || "";
+  renderUpdate(s.update || {});
   const ms = $("#mqtt-status");
   ms.textContent = s.mqtt;
   ms.className = "badge " + (s.mqtt === "connected" ? "ok" : s.mqtt === "disabled" ? "" : "bad");
@@ -373,9 +385,8 @@ function viewChips(v) {
 
 function fmtSeconds(s) {
   if (!s) return "0s";
-  if (s % 3600 === 0) return s / 3600 + "h";
-  if (s % 60 === 0) return s / 60 + "m";
-  return s + "s";
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  return [h && h + "h", m && m + "m", sec && sec + "s"].filter(Boolean).join(" ");
 }
 
 function renderViews() {
@@ -734,9 +745,10 @@ $("#volume").addEventListener("change", async (e) => {
 $("#volume-save").addEventListener("change", (e) =>
   act(() => api("PUT", "/api/config/audio", { volume: e.target.checked ? Number($("#volume").value) : -1 }), "Saved"));
 
+$("#cast-stop").addEventListener("click", () => act(() => api("POST", "/api/cast/stop"), "Casting stopped").then(refreshState));
 $("#cast-form").addEventListener("submit", async (e) => {
   e.preventDefault();
-  await act(() => api("PUT", "/api/config/cast", readForm(e.target, config.cast || {})), "Casting saved");
+  await act(() => api("PUT", "/api/config/cast", { ...(config.cast || {}), ...readForm(e.target, config.cast || {}) }), "Casting saved");
   await loadConfig();
 });
 
@@ -921,6 +933,96 @@ async function loadSystem() {
   $("#api-token").dataset.token = s.api_token;
   $("#token-show").textContent = "Show";
 }
+
+function renderUpdate(u) {
+  $("#upd-badge").hidden = !u.available;
+  $("#upd-badge-ver").textContent = u.latest || "";
+  const pill = $("#upd-badge-state");
+  let cls = "", label;
+  if (!u.enabled) label = "Checks off";
+  else if (u.error) { cls = "warn"; label = "Check failed"; }
+  else if (!u.checked_at) label = "Not checked yet";
+  else if (u.available) { cls = "bad"; label = "Update available"; }
+  else { cls = "ok"; label = "Up to date"; }
+  pill.className = "status-pill " + cls;
+  pill.textContent = label;
+  $("#upd-now").hidden = !u.available;
+  $("#upd-now span").textContent = u.available ? "Update now to " + u.latest : "Update now";
+  $("#upd-check").disabled = !u.enabled;
+  const parts = ["Installed " + u.current];
+  if (u.latest) parts.push("latest release " + u.latest);
+  if (u.error && u.enabled) parts.push("last check failed: " + u.error);
+  if (u.checked_at && u.enabled) parts.push("checked " + new Date(u.checked_at).toLocaleString());
+  if (u.last_auto) parts.push("last automatic update " + new Date(u.last_auto).toLocaleString());
+  $("#upd-status").textContent = parts.join(", ") + ".";
+  renderUpdateSettings();
+}
+
+function updateSettings() {
+  return (config && config.update_check) || {};
+}
+
+function renderUpdateSettings() {
+  const s = updateSettings();
+  const on = !s.disabled;
+  const sw = $("#upd-enabled"), auto = $("#upd-auto");
+  if (document.activeElement !== sw) sw.checked = on;
+  if (document.activeElement !== auto) auto.checked = on && !!s.auto;
+  auto.disabled = !on;
+  $("#upd-window").hidden = !(on && s.auto);
+  if (document.activeElement !== $("#upd-from")) $("#upd-from").value = s.auto_from || "03:00";
+  if (document.activeElement !== $("#upd-to")) $("#upd-to").value = s.auto_to || "05:00";
+  const days = s.auto_days || [];
+  if (!$("#upd-days").children.length) {
+    $("#upd-days").replaceChildren(...DAYS.map((d, i) => {
+      const l = el("label");
+      const c = document.createElement("input");
+      c.type = "checkbox";
+      c.value = i;
+      c.addEventListener("change", saveUpdateSettings);
+      l.append(c, el("span", d));
+      return l;
+    }));
+  }
+  $$("#upd-days input").forEach((c) => (c.checked = days.includes(Number(c.value))));
+  $("#upd-next").textContent = on && s.auto ? nextWindow(s) : "";
+}
+
+// nextWindow describes when the next automatic update can run.
+function nextWindow(s) {
+  const days = s.auto_days || [];
+  const [fh, fm] = (s.auto_from || "03:00").split(":").map(Number);
+  const now = new Date();
+  for (let i = 0; i < 8; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i, fh, fm);
+    if ((days.length === 0 || days.includes(d.getDay())) && d > now) {
+      const when = d.toLocaleString(undefined, { weekday: "long", hour: "2-digit", minute: "2-digit" });
+      return "Next window opens " + when + ". No days picked means every day.";
+    }
+  }
+  return "";
+}
+
+async function saveUpdateSettings() {
+  const body = {
+    disabled: !$("#upd-enabled").checked,
+    auto: $("#upd-enabled").checked && $("#upd-auto").checked,
+    auto_days: $$("#upd-days input:checked").map((c) => Number(c.value)),
+    auto_from: $("#upd-from").value || "03:00",
+    auto_to: $("#upd-to").value || "05:00",
+  };
+  const ok = await act(() => api("PUT", "/api/config/update_check", body), "Update settings saved");
+  await loadConfig();
+  if (ok) renderUpdate(await api("GET", "/api/update"));
+}
+
+["#upd-enabled", "#upd-auto", "#upd-from", "#upd-to"].forEach((s) => $(s).addEventListener("change", saveUpdateSettings));
+$("#upd-now").addEventListener("click", () => $("#sys-update").click());
+
+$("#upd-check").addEventListener("click", async () => {
+  const u = await act(() => api("POST", "/api/update/check"));
+  if (u) renderUpdate(u);
+});
 
 function fillOIDC() {
   const o = config.oidc || {};

@@ -69,6 +69,7 @@
       <a href="#display" data-tab="display"><svg><use href="#i-sun"/></svg><span>Display &amp; sleep</span></a>
       <a href="#system" data-tab="system"><svg><use href="#i-cog"/></svg><span>System</span></a>
     </nav>
+    <a href="#system" id="upd-badge" class="update-badge" hidden><svg><use href="#i-refresh"/></svg><span>Update available <small id="upd-badge-ver"></small></span></a>
     <div class="sidebar-foot">
       <a href="api.html" target="_blank" rel="noopener" class="navlink"><svg><use href="#i-book"/></svg><span>API docs</span></a>
       <button id="logout" class="navlink" type="button"><svg><use href="#i-logout"/></svg><span>Log out <small id="whoami" class="muted"></small></span></button>
@@ -213,9 +214,16 @@
           <div class="card-head"><h2>Casting</h2><span id="cast-status" class="badge"></span></div>
           <label class="switch-label"><input type="checkbox" name="airplay" class="switch"> AirPlay receiver</label>
           <label class="switch-label"><input type="checkbox" name="pin" class="switch"> Ask new devices for a PIN shown on screen</label>
+          <label class="switch-label"><input type="checkbox" name="youtube" class="switch"> YouTube cast button</label>
+          <p class="muted small" id="yt-discovery"></p>
           <label class="field"><span>Name shown to devices</span><input name="name" placeholder="Device name" maxlength="64"></label>
-          <p class="muted small">iPhones, iPads and Macs on the same network can mirror their screen or play video and music here (Control Center → Screen Mirroring). Android phones and Home Assistant send media over DLNA: the kiosk shows up as a DLNA Digital Media Renderer.</p>
-          <div class="card-foot"><button class="btn primary">Save</button></div>
+          <p class="muted small"><strong>AirPlay:</strong> iPhones, iPads and Macs on the same network can mirror their screen or play video and music here (Control Center → Screen Mirroring).</p>
+          <p class="muted small"><strong>YouTube:</strong> the kiosk appears under the cast button in the YouTube app on Android and iPhone, like a smart TV. Videos play through YouTube's TV app, so that needs internet. It goes back to what was showing when you disconnect, or after 2 minutes with nothing playing.</p>
+          <p class="muted small"><strong>Other apps:</strong> Android phones and Home Assistant send media over DLNA: the kiosk shows up as a DLNA Digital Media Renderer. Google Cast (Chromecast) itself is limited to Google-certified devices.</p>
+          <div class="card-foot">
+            <button type="button" id="cast-stop" class="btn" hidden><svg class="ic"><use href="#i-stop"/></svg><span>Stop casting</span></button>
+            <button class="btn primary">Save</button>
+          </div>
         </form>
       </div>
       <div class="card">
@@ -327,6 +335,25 @@
             <label class="field grow"><span>Timezone</span><input id="tz" placeholder="America/Chicago"></label>
             <button id="tz-save" class="btn">Set</button>
           </div>
+          <h3>Releases</h3>
+          <div class="release-row">
+            <span id="upd-badge-state" class="status-pill"></span>
+            <button id="upd-now" class="btn danger-solid sm" hidden><svg class="ic"><use href="#i-refresh"/></svg><span>Update now</span></button>
+            <span class="spacer"></span>
+            <button id="upd-check" class="btn sm"><svg class="ic"><use href="#i-refresh"/></svg><span>Check now</span></button>
+          </div>
+          <p id="upd-status" class="muted small"></p>
+          <label class="switch-label"><input type="checkbox" id="upd-enabled" class="switch"> Check GitHub for new pikiosk releases</label>
+          <label class="switch-label"><input type="checkbox" id="upd-auto" class="switch"> Install updates automatically</label>
+          <div id="upd-window" hidden>
+            <div class="grid-fields">
+              <label class="field"><span>Between</span><input id="upd-from" type="time"></label>
+              <label class="field"><span>And</span><input id="upd-to" type="time"></label>
+            </div>
+            <div class="days" id="upd-days"></div>
+            <p class="muted small" id="upd-next"></p>
+          </div>
+          <p class="muted small">The check runs twice a day and only looks for a newer release. With automatic updates on, the kiosk runs Update (system packages and a newer pikiosk) once a day inside the window; the display may restart. With both off, the kiosk contacts nothing on the internet.</p>
           <div class="card-foot">
             <button id="sys-reboot" class="btn danger ghost"><svg class="ic"><use href="#i-power"/></svg><span>Reboot</span></button>
             <span class="spacer"></span>

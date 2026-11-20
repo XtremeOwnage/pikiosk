@@ -11,10 +11,12 @@ Once installed, pikiosk works fully on a network with **no internet access**. No
 
 | When | Why | Without it |
 | --- | --- | --- |
-| **First boot** | The image is stock Raspberry Pi OS Lite. The installer downloads Chromium, sway, mpv, PipeWire, UxPlay and the other packages from the Debian and Raspberry Pi package mirrors. | The install waits and retries; the kiosk does not come up until it has run once. Allow internet for this boot, then block it if you like. |
+| **First boot** | Nothing: release images from v0.2.0 on come with every package installed. Older images, and installs onto your own Raspberry Pi OS card, download Chromium, sway, mpv, PipeWire, UxPlay and the rest from the Debian and Raspberry Pi package mirrors. | With a v0.2.0 or newer image, nothing: the first boot works offline. Otherwise the install waits and retries until the network is up. |
 | **System → Update** | Downloads OS package updates from the same mirrors, and the latest pikiosk release from GitHub. | The update fails and nothing changes. Only runs when you press the button. |
+| **Release check** | Twice a day, asks `api.github.com` whether a newer pikiosk release exists. On by default; turn it off under System → Releases. | The check fails quietly and shows the error under System. Nothing else is affected. |
+| **YouTube cast button** | Only while you cast: YouTube's TV app and the videos come from YouTube. | Nothing happens when you pick the kiosk in the YouTube app. |
 
-That is all. The kiosk never checks for updates on its own.
+That is all. With the release check off, the kiosk never contacts the internet on its own.
 
 ## What works offline
 

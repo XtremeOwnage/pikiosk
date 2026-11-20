@@ -66,6 +66,13 @@ Under **System → Single sign-on (OIDC)**:
 
 Switch it on and save. The login page then shows the sign-in button under the password form, and the sidebar shows who is signed in.
 
+![The single sign-on settings under System](../assets/screenshots/sso-light.png#only-light)
+![The single sign-on settings under System](../assets/screenshots/sso-dark.png#only-dark)
+
+![The login page with the sign-in button](../assets/screenshots/login-light.png#only-light)
+![The login page with the sign-in button](../assets/screenshots/login-dark.png#only-dark)
+
+
 ## Troubleshooting
 
 | Message on the login page | Cause |

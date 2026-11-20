@@ -14,6 +14,6 @@ mkdir -p "$pl/sounds"
 (cd "$repo" && CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath \
   -ldflags "-s -w -X main.version=$version" -o "$pl/kioskd" ./cmd/kioskd)
 cp -r "$repo/deploy/raspios/files" "$pl/"
-cp "$repo/deploy/raspios/install.sh" "$repo/deploy/raspios/firstboot.sh" "$pl/"
+cp "$repo/deploy/raspios/install.sh" "$repo/deploy/raspios/firstboot.sh" "$repo/deploy/raspios/packages.txt" "$pl/"
 cp "$repo"/deploy/raspios/sounds/*.wav "$pl/sounds/"
 echo "$version" > "$pl/VERSION"

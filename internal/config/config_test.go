@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestStoreRoundTrip(t *testing.T) {
@@ -63,5 +64,30 @@ func TestUpdateRejectsInvalid(t *testing.T) {
 	}
 	if len(s.Get().Views) != 0 {
 		t.Error("rejected update was stored")
+	}
+}
+
+func TestUpdateWindow(t *testing.T) {
+	at := func(day time.Weekday, hm string) time.Time {
+		// 2026-11-15 is a Sunday.
+		base := time.Date(2026, 11, 15, 0, 0, 0, 0, time.Local).AddDate(0, 0, int(day))
+		p, _ := time.Parse("15:04", hm)
+		return base.Add(time.Duration(p.Hour())*time.Hour + time.Duration(p.Minute())*time.Minute)
+	}
+	u := UpdateCheck{AutoFrom: "03:00", AutoTo: "05:00", AutoDays: []int{2}}
+	if !u.InWindow(at(time.Tuesday, "03:30")) || u.InWindow(at(time.Tuesday, "05:00")) || u.InWindow(at(time.Monday, "03:30")) {
+		t.Error("plain window wrong")
+	}
+	n := UpdateCheck{AutoFrom: "23:00", AutoTo: "02:00", AutoDays: []int{6}}
+	if !n.InWindow(at(time.Saturday, "23:30")) || !n.InWindow(at(time.Sunday, "01:00")) || n.InWindow(at(time.Sunday, "23:30")) {
+		t.Error("overnight window wrong")
+	}
+	all := UpdateCheck{AutoFrom: "03:00", AutoTo: "05:00"}
+	if !all.InWindow(at(time.Friday, "04:59")) {
+		t.Error("every-day window wrong")
+	}
+	bad := UpdateCheck{AutoFrom: "3am", AutoTo: "05:00"}
+	if bad.validate() == nil {
+		t.Error("bad time accepted")
 	}
 }

@@ -16,6 +16,9 @@ The **Views** page lists every view with its name, type, URL and what is customi
 | **Configure** | Opens the view's settings in a side panel. |
 | ↑ ↓ | Reorder. Saved immediately. |
 
+![The Views page: each view with its rotation switch, URL and what is customized](../assets/screenshots/views-light.png#only-light)
+![The Views page: each view with its rotation switch, URL and what is customized](../assets/screenshots/views-dark.png#only-dark)
+
 **Add view** opens the same panel for a new view. **Default view** below the list is what the kiosk shows at boot and after a timed view ends, unless a rotation starts at boot.
 
 ## Configure
@@ -27,6 +30,9 @@ flowchart LR
     A --> D[Request headers]
     A --> E[Page<br/>zoom, reload, CSS]
 ```
+
+![The Configure panel of a view](../assets/screenshots/view-configure-light.png#only-light)
+![The Configure panel of a view](../assets/screenshots/view-configure-dark.png#only-dark)
 
 **Save** in the panel stores the view straight away. **Delete** removes it; a view that a rotation uses must be removed from the rotation first, or switched off instead.
 
