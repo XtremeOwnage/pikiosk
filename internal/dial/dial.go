@@ -10,6 +10,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -19,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -168,6 +170,19 @@ func (s *Server) serve(ctx context.Context) error {
 	go func() {
 		<-ctx.Done()
 		conn.Close()
+	}()
+	// Listen on every network the kiosk is on (for example wired and a
+	// second Wi-Fi network for phones), including ones that come up later.
+	go func() {
+		joined := map[int]bool{}
+		for {
+			s.joinAll(conn, group.IP, joined)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(30 * time.Second):
+			}
+		}
 	}()
 	s.log.Info("dial receiver started", "port", s.port)
 	s.setRunning(true)
@@ -399,4 +414,44 @@ func StableUUID(id string) string {
 	h := sha256.Sum256([]byte("pikiosk-dial:" + id))
 	s := hex.EncodeToString(h[:16])
 	return s[0:8] + "-" + s[8:12] + "-" + s[12:16] + "-" + s[16:20] + "-" + s[20:32]
+}
+
+// joinAll joins the SSDP group on each up IPv4 multicast interface not in
+// joined yet.
+func (s *Server) joinAll(conn *net.UDPConn, group net.IP, joined map[int]bool) {
+	ifs, err := net.Interfaces()
+	if err != nil {
+		return
+	}
+	raw, err := conn.SyscallConn()
+	if err != nil {
+		return
+	}
+	for _, ifi := range ifs {
+		if joined[ifi.Index] || ifi.Flags&net.FlagUp == 0 || ifi.Flags&net.FlagMulticast == 0 || ifi.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		addrs, _ := ifi.Addrs()
+		has4 := false
+		for _, a := range addrs {
+			if n, ok := a.(*net.IPNet); ok && n.IP.To4() != nil {
+				has4 = true
+			}
+		}
+		if !has4 {
+			continue
+		}
+		mreq := &syscall.IPMreqn{Ifindex: int32(ifi.Index)}
+		copy(mreq.Multiaddr[:], group.To4())
+		var serr error
+		_ = raw.Control(func(fd uintptr) {
+			serr = syscall.SetsockoptIPMreqn(int(fd), syscall.IPPROTO_IP, syscall.IP_ADD_MEMBERSHIP, mreq)
+		})
+		if serr == nil || errors.Is(serr, syscall.EADDRINUSE) {
+			joined[ifi.Index] = true
+			if serr == nil {
+				s.log.Info("ssdp listening", "interface", ifi.Name)
+			}
+		}
+	}
 }

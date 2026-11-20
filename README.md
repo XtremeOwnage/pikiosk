@@ -13,6 +13,10 @@ It needs no cloud services, accounts or telemetry, and it runs fully without int
 
 **Documentation: <https://xtremeownage.github.io/pikiosk/>**
 
+![A kiosk showing the rPDU2MQTT power dashboard](docs-site/docs/assets/screenshots/kiosk-screen.png)
+
+*On the wall: an [rPDU2MQTT](https://github.com/XtremeOwnage/rPDU2MQTT) power dashboard. Below: the web UI that controls it.*
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs-site/docs/assets/screenshots/control-dark.png">
   <img alt="The pikiosk web UI: what the kiosk is showing, quick commands and a live preview of the screen" src="docs-site/docs/assets/screenshots/control-light.png">

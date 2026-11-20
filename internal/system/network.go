@@ -115,7 +115,20 @@ type WiFiNetwork struct {
 	Active   bool   `json:"active"`
 }
 
+// wifiOn turns the Wi-Fi radio on; Raspberry Pi OS ships with it off.
+func wifiOn(ctx context.Context) {
+	out, err := run(ctx, 10*time.Second, "nmcli", "radio", "wifi")
+	if err == nil && strings.TrimSpace(out) == "enabled" {
+		return
+	}
+	if _, err := run(ctx, 10*time.Second, "nmcli", "radio", "wifi", "on"); err == nil {
+		// Give the adapter a moment to come up before scanning.
+		time.Sleep(3 * time.Second)
+	}
+}
+
 func ScanWiFi(ctx context.Context) ([]WiFiNetwork, error) {
+	wifiOn(ctx)
 	rows, err := nmcli(ctx, "-f", "ACTIVE,SSID,SIGNAL,SECURITY", "device", "wifi", "list", "--rescan", "yes")
 	if err != nil {
 		return nil, err
@@ -147,6 +160,7 @@ func ConnectWiFi(ctx context.Context, ssid, password string) error {
 	if ssid == "" {
 		return errors.New("SSID is required")
 	}
+	wifiOn(ctx)
 	args := []string{"device", "wifi", "connect", ssid}
 	if password != "" {
 		args = append(args, "password", password)

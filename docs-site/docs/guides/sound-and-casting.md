@@ -88,10 +88,21 @@ Behind the scenes the kiosk answers DIAL, the discovery protocol smart TVs use, 
 
 Phones find the kiosk with SSDP multicast, which routers do not pass between networks. The phone and the kiosk must be on the **same Wi-Fi network or VLAN**. Google Cast devices such as a Chromecast or Nvidia Shield can still show up from another VLAN, because they are found over mDNS, which many routers do forward; that does not help the kiosk.
 
-The **Sound & cast** card shows the last time a phone's search reached the kiosk. *No phone has looked for TVs here yet* means the phone's searches never arrive. To fix it, either:
+The **Sound & cast** card shows the last time a phone's search reached the kiosk. *No phone has looked for TVs here yet* means the phone's searches never arrive. To fix it, pick one:
 
-- connect the phone to the kiosk's network (or move the kiosk to the phone's), or
-- forward SSDP (UDP 1900 to 239.255.255.250) between the two networks with an SSDP or UPnP relay on the router, and allow TCP 56790 from the phone's network to the kiosk.
+| Option | How |
+| --- | --- |
+| **Join the phones' Wi-Fi as well** (easiest) | Keep the kiosk wired, and on the **Network** page scan and connect to the Wi-Fi network your phones use. The kiosk then listens on both networks and answers each phone with its address on the phone's own network. The web UI is reachable from that Wi-Fi too. |
+| Same network | Put the phone on the kiosk's network, or the kiosk on the phone's. |
+| Relay on the router | Forward SSDP multicast (UDP 1900 to 239.255.255.250) from the phones' network to the kiosk's, for example with an IGMP proxy, and allow TCP 56790 and UDP replies between them. |
+
+```mermaid
+flowchart LR
+    P[Phone<br/>Wi-Fi network] -- SSDP search --> W[kiosk wlan0]
+    W --- K[kioskd]
+    E[kiosk eth0<br/>wired VLAN] --- K
+    K -- "here: http://wlan0-address:56790" --> P
+```
 
 This is YouTube only, and the videos come from YouTube, so it needs internet while you use it. Other Android apps can send media over [DLNA](#dlna).
 

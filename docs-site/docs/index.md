@@ -17,6 +17,10 @@ It needs no cloud services, accounts or telemetry. Everything it does stays on y
 
 [Install it](getting-started/installation.md){ .md-button .md-button--primary } [REST API](reference/rest-api.md){ .md-button }
 
+![A kiosk showing the rPDU2MQTT power dashboard](assets/screenshots/kiosk-screen.png)
+
+*The screen: an [rPDU2MQTT](https://github.com/XtremeOwnage/rPDU2MQTT) power dashboard in a rotation.*
+
 ![The Control page: what is showing, quick commands and a live preview of the screen](assets/screenshots/control-light.png#only-light)
 ![The Control page: what is showing, quick commands and a live preview of the screen](assets/screenshots/control-dark.png#only-dark)
 
