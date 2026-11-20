@@ -356,6 +356,9 @@ in
         # After a watchdog abort, do not wait for every Chromium process to
         # dump core before restarting.
         TimeoutAbortSec = 10;
+        # No core dumps: after an abort, dumping every Chromium process to
+        # the SD card delays the restart and wears the card.
+        LimitCORE = 0;
         Restart = "always";
         RestartSec = 3;
         StateDirectory = "pikiosk";

@@ -14,6 +14,8 @@ NotifyAccess=main
 WatchdogSec=90
 # After a watchdog abort, do not wait for every Chromium process to dump core.
 TimeoutAbortSec=10
+# No core dumps: they delay the restart and wear the SD card.
+LimitCORE=0
 Restart=always
 RestartSec=3
 StateDirectory=pikiosk
