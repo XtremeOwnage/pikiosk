@@ -1136,9 +1136,10 @@ $("#backup-file").addEventListener("change", async (e) => {
     l.append(cb, " " + label);
     return l;
   }));
-  $("#backup-hint").textContent = sameDevice
-    ? "This backup is from this kiosk: everything is selected."
-    : "This backup is from another kiosk: its name, ID and login are left out unless you pick them.";
+  $("#backup-hint").textContent = (sameDevice
+    ? "This backup is from this kiosk, so everything in it is selected."
+    : "This backup is from another kiosk: its name, ID and login are left out unless you pick them.")
+    + (b.secrets ? "" : " It was made without passwords and tokens: the kiosk keeps its own.");
   $("#backup-preview").hidden = false;
 });
 

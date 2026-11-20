@@ -7,6 +7,9 @@ description: Export a kiosk's settings and sounds to one file, and restore or co
 
 **System → Backup & restore** saves the kiosk's setup to one JSON file and loads it back. Use it before a reflash, to move to a new SD card, or to set up a second kiosk like the first.
 
+![The Backup & restore card, with a backup file chosen and its parts ready to restore](../assets/screenshots/backup-light.png#only-light)
+![The Backup & restore card, with a backup file chosen and its parts ready to restore](../assets/screenshots/backup-dark.png#only-dark)
+
 ## What is in a backup
 
 | Part | |
