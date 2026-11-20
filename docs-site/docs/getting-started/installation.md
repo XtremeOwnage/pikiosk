@@ -5,6 +5,13 @@ description: Flash the pikiosk image, add Wi-Fi and SSH keys, and boot.
 
 # Installation
 
+There are two ways to install pikiosk:
+
+| | |
+| --- | --- |
+| **Flash the pikiosk image** (below) | A fresh SD card with everything on it. No internet needed, Wi-Fi and SSH keys from files on the card. |
+| **[Install on your Raspberry Pi OS](#install-on-an-existing-raspberry-pi-os)** | One command on a Pi that already runs Raspberry Pi OS Lite. Keeps the card, SSH and network setup you already have; downloads the packages. |
+
 ## What you need
 
 - A Raspberry Pi 5, 4, 400 or 500 (64-bit). 2 GB of RAM is enough.
@@ -69,6 +76,47 @@ Put the card in the Pi, connect the monitor and network, and power it on. The fi
 The screen then shows a welcome page with the addresses to open, for example `http://pikiosk.local`. If it doesn't appear, see [Troubleshooting](../operations/troubleshooting.md).
 
 Next: [First setup](first-setup.md).
+
+## Install on an existing Raspberry Pi OS
+
+On a Pi running **Raspberry Pi OS Lite, 64-bit, based on Debian 13 (trixie)**, for example one set up with Raspberry Pi Imager's own Wi-Fi, user and SSH settings, run:
+
+```bash
+curl -fsSL https://github.com/XtremeOwnage/pikiosk/releases/latest/download/get.sh | sudo bash
+```
+
+The script:
+
+1. checks the Pi: 64-bit, trixie, and whether it boots to a desktop (it asks before replacing the desktop login with the kiosk)
+2. downloads the latest release's `pikiosk-arm64.tar.gz` and checks it against the published SHA-256
+3. runs its installer, which installs Chromium, sway, mpv, PipeWire, UxPlay and the rest from the Raspberry Pi OS package mirrors, creates the `kiosk` user and starts the kiosk session
+
+This takes a few minutes and needs internet for the packages. Afterwards the kiosk runs offline like any other install. Your own user, SSH keys and network settings are left alone.
+
+To read the script before running it:
+
+```bash
+curl -fsSLO https://github.com/XtremeOwnage/pikiosk/releases/latest/download/get.sh
+```
+
+```bash
+less get.sh
+```
+
+```bash
+sudo bash get.sh
+```
+
+| Variable | |
+| --- | --- |
+| `PIKIOSK_VERSION=v0.2.0` | Install that release instead of the latest. |
+| `PIKIOSK_RELEASES=owner/repo` | Install from a fork's releases. |
+| `PIKIOSK_YES=1` | Replace a desktop login without asking. |
+
+Set them after `sudo`, for example `curl -fsSL … | sudo PIKIOSK_VERSION=v0.2.0 bash`. Running the script again updates pikiosk; so does System → Update in the web UI.
+
+!!! note "Raspberry Pi OS with desktop"
+    It works, but the desktop no longer starts: the Pi boots straight into the kiosk. Use Lite if the Pi is only a kiosk.
 
 ## Building the image yourself
 

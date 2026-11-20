@@ -34,6 +34,12 @@ You need a 64-bit Raspberry Pi (5, 4, 400 or 500), a microSD card of 8 GB or mor
 4. Boot the Pi. The first boot sets up pikiosk (a few minutes) and reboots.
 5. Open the address shown on screen, for example `http://pikiosk.local`, and choose an admin password.
 
+Already running Raspberry Pi OS Lite (64-bit, trixie) on the Pi? Install without reflashing:
+
+```bash
+curl -fsSL https://github.com/XtremeOwnage/pikiosk/releases/latest/download/get.sh | sudo bash
+```
+
 ## Features
 
 | | |

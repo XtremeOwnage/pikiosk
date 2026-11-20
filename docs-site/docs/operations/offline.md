@@ -11,6 +11,7 @@ Once installed, pikiosk works fully on a network with **no internet access**. No
 
 | When | Why | Without it |
 | --- | --- | --- |
+| **Installing with `get.sh`** | Downloads the release and the packages. | Install from the image instead. |
 | **First boot** | Nothing: release images from v0.2.0 on come with every package installed. Older images, and installs onto your own Raspberry Pi OS card, download Chromium, sway, mpv, PipeWire, UxPlay and the rest from the Debian and Raspberry Pi package mirrors. | With a v0.2.0 or newer image, nothing: the first boot works offline. Otherwise the install waits and retries until the network is up. |
 | **System → Update** | Downloads OS package updates from the same mirrors, and the latest pikiosk release from GitHub. | The update fails and nothing changes. Only runs when you press the button. |
 | **Release check** | Twice a day, asks `api.github.com` whether a newer pikiosk release exists. On by default; turn it off under System → Releases. | The check fails quietly and shows the error under System. Nothing else is affected. |

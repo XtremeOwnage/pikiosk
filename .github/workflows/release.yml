@@ -28,6 +28,7 @@ jobs:
           mkdir -p dist work
           deploy/raspios/payload.sh work "$VERSION"
           tar -C work -czf dist/pikiosk-arm64.tar.gz pikiosk
+          cp deploy/raspios/get.sh dist/get.sh
       - name: Image
         run: |
           curl -fsSL -o raspios.img.xz https://downloads.raspberrypi.com/raspios_lite_arm64_latest
