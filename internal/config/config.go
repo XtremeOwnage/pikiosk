@@ -191,6 +191,9 @@ type Cast struct {
 	YouTube bool `json:"youtube"`
 	// YouTubeUserAgent overrides the TV user agent YouTube's TV app needs.
 	YouTubeUserAgent string `json:"youtube_user_agent,omitempty"`
+	// YouTubeKeepReady keeps YouTube's TV app running in a background tab,
+	// so phones linked with a TV code can cast to the kiosk at any time.
+	YouTubeKeepReady bool `json:"youtube_keep_ready"`
 }
 
 type Audio struct {

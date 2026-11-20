@@ -813,13 +813,17 @@ var keys = map[string]struct {
 }
 
 func (b *Browser) Key(ctx context.Context, name string) error {
-	k, ok := keys[name]
-	if !ok {
-		return fmt.Errorf("unsupported key %q", name)
-	}
 	conn, err := b.connection()
 	if err != nil {
 		return err
+	}
+	return keyOn(ctx, conn, name)
+}
+
+func keyOn(ctx context.Context, conn *cdp, name string) error {
+	k, ok := keys[name]
+	if !ok {
+		return fmt.Errorf("unsupported key %q", name)
 	}
 	down := map[string]any{"type": "rawKeyDown", "key": name, "code": k.code, "windowsVirtualKeyCode": k.vk}
 	if k.text != "" {
@@ -962,5 +966,85 @@ func sleep(ctx context.Context, d time.Duration) {
 	select {
 	case <-t.C:
 	case <-ctx.Done():
+	}
+}
+
+// ErrNoTab means no tab shows the page.
+var ErrNoTab = errors.New("page is not loaded")
+
+// tabFor returns the tab, visible or in the background, showing page.
+func (b *Browser) tabFor(page Page) (*tab, bool, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.front != nil && b.front.page.same(page) {
+		return b.front, true, nil
+	}
+	for _, t := range b.bg {
+		if t.page.same(page) {
+			return t, false, nil
+		}
+	}
+	return nil, false, ErrNoTab
+}
+
+// Loaded reports whether a tab holds page, and whether it is the visible one.
+func (b *Browser) Loaded(page Page) (loaded, visible bool) {
+	_, vis, err := b.tabFor(page)
+	return err == nil, vis
+}
+
+// EvalIn evaluates a JavaScript expression in the tab showing page and
+// returns its result as a string.
+func (b *Browser) EvalIn(ctx context.Context, page Page, expr string) (string, error) {
+	t, _, err := b.tabFor(page)
+	if err != nil {
+		return "", err
+	}
+	var res struct {
+		Result struct {
+			Value any `json:"value"`
+		} `json:"result"`
+		ExceptionDetails *struct {
+			Text string `json:"text"`
+		} `json:"exceptionDetails"`
+	}
+	if err := t.conn.Call(ctx, "Runtime.evaluate", map[string]any{"expression": expr, "returnByValue": true}, &res); err != nil {
+		return "", err
+	}
+	if res.ExceptionDetails != nil {
+		return "", errors.New(res.ExceptionDetails.Text)
+	}
+	if s, ok := res.Result.Value.(string); ok {
+		return s, nil
+	}
+	out, _ := json.Marshal(res.Result.Value)
+	return string(out), nil
+}
+
+// KeyIn presses a key in the tab showing page, visible or not.
+func (b *Browser) KeyIn(ctx context.Context, page Page, name string) error {
+	t, _, err := b.tabFor(page)
+	if err != nil {
+		return err
+	}
+	return keyOn(ctx, t.conn, name)
+}
+
+// Drop closes the background tab showing page, if there is one.
+func (b *Browser) Drop(ctx context.Context, page Page) {
+	b.switchMu.Lock()
+	defer b.switchMu.Unlock()
+	b.mu.Lock()
+	var gone *tab
+	for i, t := range b.bg {
+		if t.page.same(page) {
+			gone = t
+			b.bg = append(b.bg[:i:i], b.bg[i+1:]...)
+			break
+		}
+	}
+	b.mu.Unlock()
+	if gone != nil {
+		b.closeTab(ctx, gone)
 	}
 }

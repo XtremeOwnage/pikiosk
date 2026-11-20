@@ -406,6 +406,17 @@ pkgs.testers.runNixOSTest {
         api("POST", "/api/view", {"name": "one"})
         wait_title("pikiosk test page")
 
+    with subtest("YouTube kept ready: a linked phone's video comes to the front"):
+        cfg = json.loads(api("GET", "/api/config"))
+        api("PUT", "/api/config/cast", dict(cfg["cast"], youtube=True, youtube_keep_ready=True))
+        # The stand-in TV app "plays" as soon as it loads in the background.
+        kiosk.wait_until_succeeds(f"{C} http://127.0.0.1/api/state | jq -e '.state.cast_source == \"youtube\"'", timeout=90)
+        wait_title("tv cobalt=true")
+        api("POST", "/api/cast/stop")
+        wait_title("pikiosk test page")
+        api("PUT", "/api/config/cast", dict(cfg["cast"], youtube=True, youtube_keep_ready=False))
+        kiosk.wait_until_succeeds("! curl -s http://127.0.0.1:9222/json/list | grep -q 'tv cobalt'", timeout=30)
+
     with subtest("sounds: library, playback and activity events over MQTT"):
         sounds = json.loads(kiosk.succeed("mosquitto_sub -h 127.0.0.1 -t pikiosk/test/sounds -C 1 -W 10"))
         assert {"chime", "doorbell", "alert", "success"} <= set(sounds), sounds

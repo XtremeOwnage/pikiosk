@@ -49,10 +49,13 @@ type Server struct {
 	MQTT    *mqtt.Bridge
 	Update  *update.Checker
 	YouTube interface{ Status() dial.Status }
-	Stats   func() map[string]any
-	Version string
-	Port    string
-	Log     *slog.Logger
+	// LinkYouTube opens the TV app's "Link with TV code" screen and returns
+	// the code.
+	LinkYouTube func(ctx context.Context) (string, error)
+	Stats       func() map[string]any
+	Version     string
+	Port        string
+	Log         *slog.Logger
 
 	mu       sync.Mutex
 	sessions map[string]session
@@ -101,6 +104,7 @@ func (s *Server) Handler() http.Handler {
 	api("POST /api/rotation/stop", s.cmdShortcut("stop_rotation"))
 	api("POST /api/rotation/next", s.cmdShortcut("next"))
 	api("POST /api/cast/stop", s.cmdShortcut("stop_cast"))
+	api("POST /api/cast/youtube/link", s.linkYouTube)
 	api("POST /api/sound/play", s.cmdShortcut("play_sound"))
 	api("POST /api/sound/stop", s.cmdShortcut("stop_sound"))
 	api("POST /api/volume", s.cmdShortcut("volume"))
@@ -694,6 +698,21 @@ func (s *Server) clearRetained(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]any{"topics": topics})
+}
+
+func (s *Server) linkYouTube(w http.ResponseWriter, r *http.Request) {
+	if s.LinkYouTube == nil || !s.Config.Get().Cast.YouTube {
+		writeErr(w, http.StatusConflict, errors.New("the YouTube cast button is turned off"))
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
+	defer cancel()
+	code, err := s.LinkYouTube(ctx)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err)
+		return
+	}
+	writeJSON(w, map[string]string{"code": code})
 }
 
 func (s *Server) youtubeStatus() any {

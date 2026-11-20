@@ -84,6 +84,30 @@ Behind the scenes the kiosk answers DIAL, the discovery protocol smart TVs use, 
 | Ending | Disconnect in the YouTube app, press **Stop casting**, send `stop_cast`, or leave nothing playing for 2 minutes. The kiosk then goes back to what it was showing. |
 | Network | Phones find it over SSDP (UDP 1900, multicast) and launch it on TCP 56790. Phones on another VLAN need SSDP forwarded. |
 
+### Link with TV code
+
+When the phone is on another network, or the Wi-Fi keeps devices apart, link it once with a code instead. Pairing then goes through YouTube's servers, so the phone and the kiosk do not need to see each other on the network.
+
+1. Under **Sound & cast**, press **Link a phone with a TV code**. The kiosk opens YouTube's TV app, goes to *Settings → Link with TV code* by itself, and shows the code on its screen and in the web UI.
+2. On the phone, open the YouTube app, tap the cast icon, then **Link with TV code**, and enter the code.
+3. The kiosk now appears under the cast button whenever YouTube's TV app is open on it.
+
+To be able to cast at any time, switch on **Keep YouTube ready for linked phones**. The TV app then keeps running in a hidden tab, signed out as a guest, while the kiosk shows its views. As soon as a phone starts a video on it, the kiosk brings it to the front; when the phone disconnects, or nothing plays for 2 minutes, it goes back to what it was showing. The hidden tab uses roughly 150 to 250 MB of memory.
+
+```mermaid
+sequenceDiagram
+    participant P as Phone
+    participant Y as YouTube servers
+    participant K as Kiosk (TV app in a hidden tab)
+    P->>Y: link with TV code 123 456 789 012
+    Y-->>K: phone linked
+    P->>Y: play this video on the kiosk
+    Y->>K: TV app starts the video
+    K->>K: bring the TV app to the front
+```
+
+The link page stays up for 10 minutes. If the kiosk cannot reach the code screen (YouTube changes its app now and then), it stays on YouTube; use the arrow keys under **Remote** on the Control page to go to *Settings → Link with TV code*.
+
 ### The kiosk does not show up in the YouTube app
 
 Phones find the kiosk with SSDP multicast, which routers do not pass between networks. The phone and the kiosk must be on the **same Wi-Fi network or VLAN**. Google Cast devices such as a Chromecast or Nvidia Shield can still show up from another VLAN, because they are found over mDNS, which many routers do forward; that does not help the kiosk.
@@ -92,7 +116,8 @@ The **Sound & cast** card shows the last time a phone's search reached the kiosk
 
 | Option | How |
 | --- | --- |
-| **Join the phones' Wi-Fi as well** (easiest) | Keep the kiosk wired, and on the **Network** page scan and connect to the Wi-Fi network your phones use. The kiosk then listens on both networks and answers each phone with its address on the phone's own network. The web UI is reachable from that Wi-Fi too. |
+| **Link with TV code** (easiest) | See [above](#link-with-tv-code). Works across networks and with client isolation. |
+| **Join the phones' Wi-Fi as well** | Keep the kiosk wired, and on the **Network** page scan and connect to the Wi-Fi network your phones use. The kiosk then listens on both networks and answers each phone with its address on the phone's own network. The web UI is reachable from that Wi-Fi too. |
 | Same network | Put the phone on the kiosk's network, or the kiosk on the phone's. |
 | Relay on the router | Forward SSDP multicast (UDP 1900 to 239.255.255.250) from the phones' network to the kiosk's, for example with an IGMP proxy, and allow TCP 56790 and UDP replies between them. |
 

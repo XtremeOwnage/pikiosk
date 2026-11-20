@@ -745,6 +745,23 @@ $("#volume").addEventListener("change", async (e) => {
 $("#volume-save").addEventListener("change", (e) =>
   act(() => api("PUT", "/api/config/audio", { volume: e.target.checked ? Number($("#volume").value) : -1 }), "Saved"));
 
+$("#yt-link").addEventListener("click", async () => {
+  const b = $("#yt-link");
+  b.disabled = true;
+  $("#yt-code-box").hidden = false;
+  $("#yt-code").textContent = "Opening YouTube on the kiosk…";
+  try {
+    const r = await api("POST", "/api/cast/youtube/link");
+    $("#yt-code").textContent = r.code;
+  } catch (e) {
+    $("#yt-code").textContent = "";
+    $("#yt-code-box").hidden = true;
+    toast(e.message + ". YouTube is open on the kiosk: use the Remote's arrow keys to go to Settings → Link with TV code.", true);
+  } finally {
+    b.disabled = false;
+    refreshState();
+  }
+});
 $("#cast-stop").addEventListener("click", () => act(() => api("POST", "/api/cast/stop"), "Casting stopped").then(refreshState));
 $("#cast-form").addEventListener("submit", async (e) => {
   e.preventDefault();

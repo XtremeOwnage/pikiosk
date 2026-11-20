@@ -41,6 +41,7 @@ Command endpoints return the kiosk state (see `GET /api/state`, field `state`) a
 | `POST /api/rotation/stop` | | Stay on the current view. |
 | `POST /api/rotation/next` | | Skip to the next view of the running rotation. |
 | `POST /api/cast/stop` | | End a YouTube cast and go back to what was showing. |
+| `POST /api/cast/youtube/link` | | Open YouTube's TV app on the kiosk at *Link with TV code* and return `{"code": "123 456 789 012"}`. Takes up to a minute. |
 | `POST /api/screen` | `{"on": false}` | Turn the screen on or off. |
 | `POST /api/brightness` | `{"value": 70}` | Set monitor brightness 0-100 over DDC/CI. |
 | `POST /api/sound/play` | `{"path": "chime", "volume": 80}` | Play a library sound by name, a path inside the library, or an `http(s)` URL. `volume` is optional. |
@@ -77,7 +78,7 @@ Actions accepted by `POST /api/command` and MQTT: `view`, `url`, `stream`, `stop
 | `PUT /api/config/views` | `{"views": [View], "default_view": "name", "renames": {"old name": "new name"}}`. `renames` is optional; rotations and the default view follow a renamed view. |
 | `PUT /api/config/rotations` | `{"rotations": [{"name", "items": [{"view", "seconds", "disabled"}]}], "default_rotation": "name"}`. A `disabled` step is skipped without being removed. |
 | `PUT /api/config/audio` | `{"volume": -1}` (-1 leaves the system volume alone at boot) |
-| `PUT /api/config/cast` | `{"airplay": true, "name": "", "pin": false, "youtube": true, "youtube_user_agent": ""}`. `youtube` is the YouTube cast button; `youtube_user_agent` overrides the TV user agent YouTube's TV app needs. |
+| `PUT /api/config/cast` | `{"airplay": true, "name": "", "pin": false, "youtube": true, "youtube_user_agent": ""}`. `youtube` is the YouTube cast button; `youtube_keep_ready` keeps YouTube's TV app running in a hidden tab for linked phones; `youtube_user_agent` overrides the TV user agent YouTube's TV app needs. |
 | `PUT /api/config/mqtt` | `{"enabled", "host", "port", "tls", "tls_insecure", "username", "password", "base_topic", "discovery", "discovery_prefix"}` |
 | `PUT /api/config/display` | `{"rotation": 0, "scale": 1, "brightness": -1, "hide_cursor_seconds": 3}` |
 | `PUT /api/config/oidc` | `{"enabled", "issuer", "client_id", "client_secret", "allowed_groups": [], "button_label", "redirect_url"}`. When enabled, the issuer's discovery document must be reachable or the save is refused. |

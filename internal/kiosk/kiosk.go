@@ -808,14 +808,37 @@ const webCastMax = 4 * time.Hour
 // WebCastIdle ends a web cast whose page has not been playing for this long.
 var WebCastIdle = 2 * time.Minute
 
-// StartWebCast shows a cast page (YouTube's TV app) over whatever is
-// showing; the rotation pauses. It ends with StopWebCast, when the page
-// stops playing for WebCastIdle, or when something else is shown. playing
-// reports from the page URL whether media is playing.
-func (k *Kiosk) StartWebCast(ctx context.Context, source, url, userAgent string, playing func(url string) bool) error {
+// WebCast is a page shown on behalf of a phone, such as YouTube's TV app.
+type WebCast struct {
+	Source    string
+	URL       string
+	UserAgent string
+	// Playing reports from the page URL whether media is playing.
+	Playing func(url string) bool
+	// Idle ends the cast after this long with nothing playing; 0 uses
+	// WebCastIdle.
+	Idle time.Duration
+	// Keep leaves the page loaded in the background after the cast.
+	Keep bool
+}
+
+// Page is the browser page a web cast shows.
+func (c WebCast) Page() browser.Page {
+	return browser.Page{URL: c.URL, UserAgent: c.UserAgent, Keep: c.Keep}
+}
+
+// StartWebCast shows a cast page over whatever is showing; the rotation
+// pauses. It ends with StopWebCast, when the page stops playing for the
+// idle time, or when something else is shown.
+func (k *Kiosk) StartWebCast(ctx context.Context, c WebCast) error {
+	source, url, playing := c.Source, c.URL, c.Playing
+	idle := c.Idle
+	if idle == 0 {
+		idle = WebCastIdle
+	}
 	// State and events show the address without the phone's pairing code.
 	shown, _, _ := strings.Cut(url, "?")
-	t := target{mode: ModeWeb, url: shown, page: browser.Page{URL: url, UserAgent: userAgent}, cast: source}
+	t := target{mode: ModeWeb, url: shown, page: c.Page(), cast: source}
 	if err := k.show(ctx, t, webCastMax, 0); err != nil {
 		return err
 	}
@@ -833,11 +856,11 @@ func (k *Kiosk) StartWebCast(ctx context.Context, source, url, userAgent string,
 		k.Emit("cast_started", source)
 	}
 	k.publish()
-	go k.watchWebCast(ictx, playing)
+	go k.watchWebCast(ictx, playing, idle)
 	return nil
 }
 
-func (k *Kiosk) watchWebCast(ctx context.Context, playing func(string) bool) {
+func (k *Kiosk) watchWebCast(ctx context.Context, playing func(string) bool, idle time.Duration) {
 	last := time.Now()
 	tick := time.NewTicker(5 * time.Second)
 	defer tick.Stop()
@@ -854,8 +877,8 @@ func (k *Kiosk) watchWebCast(ctx context.Context, playing func(string) bool) {
 			last = time.Now()
 			continue
 		}
-		if time.Since(last) > WebCastIdle {
-			k.Emit("cast_idle", "nothing played for "+WebCastIdle.String())
+		if time.Since(last) > idle {
+			k.Emit("cast_idle", "nothing played for "+idle.String())
 			_ = k.StopWebCast(context.Background())
 			return
 		}

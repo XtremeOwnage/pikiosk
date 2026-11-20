@@ -140,6 +140,12 @@
               <button class="btn" data-key="Escape">Esc</button>
             </div>
             <div class="btn-group">
+              <button class="btn icon" data-key="ArrowLeft" title="Left" aria-label="Left">←</button>
+              <button class="btn icon" data-key="ArrowUp" title="Up" aria-label="Up">↑</button>
+              <button class="btn icon" data-key="ArrowDown" title="Down" aria-label="Down">↓</button>
+              <button class="btn icon" data-key="ArrowRight" title="Right" aria-label="Right">→</button>
+            </div>
+            <div class="btn-group">
               <button class="btn icon" data-scroll="-400" title="Scroll up" aria-label="Scroll up"><svg class="ic"><use href="#i-up"/></svg></button>
               <button class="btn icon" data-scroll="400" title="Scroll down" aria-label="Scroll down"><svg class="ic"><use href="#i-down"/></svg></button>
             </div>
@@ -215,7 +221,16 @@
           <label class="switch-label"><input type="checkbox" name="airplay" class="switch"> AirPlay receiver</label>
           <label class="switch-label"><input type="checkbox" name="pin" class="switch"> Ask new devices for a PIN shown on screen</label>
           <label class="switch-label"><input type="checkbox" name="youtube" class="switch"> YouTube cast button</label>
+          <label class="switch-label"><input type="checkbox" name="youtube_keep_ready" class="switch"> Keep YouTube ready for linked phones</label>
           <p class="muted small" id="yt-discovery"></p>
+          <div class="field-row wrap">
+            <button type="button" id="yt-link" class="btn"><svg class="ic"><use href="#i-cast"/></svg><span>Link a phone with a TV code</span></button>
+          </div>
+          <div id="yt-code-box" class="code-box" hidden>
+            <div class="muted small">On the phone, open the YouTube app, tap the <strong>cast icon</strong>, then <strong>Link with TV code</strong>, and enter:</div>
+            <div id="yt-code" class="code"></div>
+            <div class="muted small">The code is also on the kiosk's screen. Once linked, the kiosk appears under the cast button whenever YouTube is open on it; turn on <em>Keep YouTube ready</em> to make that always.</div>
+          </div>
           <label class="field"><span>Name shown to devices</span><input name="name" placeholder="Device name" maxlength="64"></label>
           <p class="muted small"><strong>AirPlay:</strong> iPhones, iPads and Macs on the same network can mirror their screen or play video and music here (Control Center → Screen Mirroring).</p>
           <p class="muted small"><strong>YouTube:</strong> the kiosk appears under the cast button in the YouTube app on Android and iPhone, like a smart TV. Videos play through YouTube's TV app, so that needs internet. It goes back to what was showing when you disconnect, or after 2 minutes with nothing playing.</p>

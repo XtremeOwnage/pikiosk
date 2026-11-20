@@ -102,7 +102,8 @@ func run(log *slog.Logger, stateDir, listen, chromium, mpv string, devtools int,
 	if u := os.Getenv("PIKIOSK_YOUTUBE_TV"); u != "" {
 		dial.TVURL = u
 	}
-	yt := dial.New(dialPort, dial.StableUUID(cfg.Get().DeviceID), youtubeTV{k: k, cfg: cfg}, log)
+	ytv := &youtubeTV{k: k, b: br, cfg: cfg, log: log.With("component", "youtube")}
+	yt := dial.New(dialPort, dial.StableUUID(cfg.Get().DeviceID), ytv, log)
 	applyYouTube := func(c config.Config) {
 		name := c.Cast.Name
 		if name == "" {
@@ -150,7 +151,7 @@ func run(log *slog.Logger, stateDir, listen, chromium, mpv string, devtools int,
 		}
 	})
 
-	srv := &web.Server{Config: cfg, Kiosk: k, Browser: br, Player: pl, Audio: au, Cast: rx, MQTT: bridge, Stats: stats, Version: version, Port: port, Log: log, Update: upd, YouTube: yt}
+	srv := &web.Server{Config: cfg, Kiosk: k, Browser: br, Player: pl, Audio: au, Cast: rx, MQTT: bridge, Stats: stats, Version: version, Port: port, Log: log, Update: upd, YouTube: yt, LinkYouTube: ytv.Link}
 	httpSrv := &http.Server{
 		Addr:              listen,
 		Handler:           srv.Handler(),
@@ -161,6 +162,7 @@ func run(log *slog.Logger, stateDir, listen, chromium, mpv string, devtools int,
 	go pl.Run(ctx)
 	go rx.Run(ctx)
 	go yt.Run(ctx)
+	go ytv.keepReady(ctx)
 	go k.Run(ctx)
 	go bridge.Run(ctx)
 	go upd.Run(ctx)
@@ -246,35 +248,6 @@ func envOr(k, def string) string {
 		return v
 	}
 	return def
-}
-
-// dialPort is where phones reach the YouTube cast receiver.
-const dialPort = 56790
-
-// youtubeUserAgent makes YouTube serve its TV app, which phones pair with.
-const youtubeUserAgent = "Mozilla/5.0 (Linux armeabi-v7a; Android 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36 Cobalt/25.lts.30.1034943-gold (unlike Gecko) v8/8.8.278.17-jit gles Starboard/15, pikiosk_RaspberryPi_2024/1.0 (pikiosk, Kiosk, Wired)"
-
-// youtubeTV runs YouTube's TV app as a web cast for the DIAL receiver.
-type youtubeTV struct {
-	k   *kiosk.Kiosk
-	cfg *config.Store
-}
-
-func (y youtubeTV) Launch(ctx context.Context, url string) error {
-	ua := y.cfg.Get().Cast.YouTubeUserAgent
-	if ua == "" {
-		ua = youtubeUserAgent
-	}
-	return y.k.StartWebCast(ctx, "youtube", url, ua, youtubePlaying)
-}
-
-func (y youtubeTV) Stop(ctx context.Context) error { return y.k.StopWebCast(ctx) }
-func (y youtubeTV) Running() bool                  { return y.k.WebCasting() == "youtube" }
-
-// youtubePlaying reports whether the TV app is on a video rather than its
-// home screen, from its URL (https://www.youtube.com/tv#/watch?v=…).
-func youtubePlaying(url string) bool {
-	return strings.Contains(url, "/watch")
 }
 
 // autoUpdate runs System -> Update once a day inside the configured window.

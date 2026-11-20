@@ -12,6 +12,8 @@ description: Release notes.
 - Automatic updates inside a chosen time window and days, at most once a day.
 - Schedules (sleep and automatic updates) follow a timezone change right away instead of after a restart.
 - The Sound & cast card shows whether phones' YouTube searches reach the kiosk, to spot VLAN problems.
+- Link with TV code: one button opens YouTube's TV app at its code screen, so phones on other networks can link through YouTube. Keep YouTube ready runs the TV app in a hidden tab and brings it up when a linked phone casts.
+- The Remote has arrow keys.
 - The YouTube receiver listens on every network the kiosk is on, so a wired kiosk can also join the phones' Wi-Fi and be found there. Wi-Fi scan and connect turn the Wi-Fi radio on first.
 - The release image has every package installed, so the first boot needs no internet.
 - `self-update.sh` only installs a release that is newer than what is running.
