@@ -140,6 +140,9 @@ func (s *Server) Handler() http.Handler {
 	api("GET /api/network", s.getNetwork)
 	api("POST /api/network/wifi/scan", s.scanWiFi)
 	api("POST /api/network/wifi/connect", s.connectWiFi)
+	api("GET /api/network/wifi", s.getWiFi)
+	api("POST /api/network/wifi/radio", s.wifiRadio)
+	api("POST /api/network/wifi/forget", s.forgetWiFi)
 	api("POST /api/network/ipv4", s.setIPv4)
 
 	api("GET /api/system", s.getSystem)
@@ -797,6 +800,45 @@ func (s *Server) connectWiFi(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
+	writeJSON(w, map[string]bool{"ok": true})
+}
+
+func (s *Server) getWiFi(w http.ResponseWriter, r *http.Request) {
+	st, err := system.GetWiFi(r.Context())
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, st)
+}
+
+func (s *Server) wifiRadio(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		On bool `json:"on"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	if err := system.SetWiFiRadio(r.Context(), body.On); err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	s.Kiosk.Emit("network", map[bool]string{true: "Wi-Fi on", false: "Wi-Fi off"}[body.On])
+	writeJSON(w, map[string]bool{"ok": true})
+}
+
+func (s *Server) forgetWiFi(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Name string `json:"name"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	if err := system.ForgetWiFi(r.Context(), body.Name); err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	s.Kiosk.Emit("network", "forgot Wi-Fi "+body.Name)
 	writeJSON(w, map[string]bool{"ok": true})
 }
 

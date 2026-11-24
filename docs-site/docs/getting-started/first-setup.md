@@ -30,7 +30,7 @@ The first visit asks for an admin password of at least 8 characters. It protects
 | **Display & sleep** | Rotation, scale, brightness, cursor, idle timeout and schedule. See [Display and sleep](../guides/display-and-sleep.md). |
 | **System** | Device name and ID, timezone, updates, reboot, password and API token. |
 
-The **Network** tab shows each interface with its address, gateway and DNS, and switches between DHCP and a static address. Wi-Fi networks can be scanned and joined there too.
+The **Network** tab shows each interface with its address, gateway and DNS, and switches between DHCP and a static address. Wi-Fi networks can be scanned and joined there too, saved ones forgotten, and Wi-Fi switched off altogether.
 
 ![The Network page](../assets/screenshots/network-light.png#only-light)
 ![The Network page](../assets/screenshots/network-dark.png#only-dark)

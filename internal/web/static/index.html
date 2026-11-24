@@ -81,7 +81,7 @@
     <!-- Control -->
     <section data-panel="control">
       <div class="page-head">
-        <div><h1>Control</h1><p class="muted">What the kiosk is showing, and a live remote for the screen.</p></div>
+        <div><h1>Control</h1><p class="muted">What is showing, and a remote.</p></div>
       </div>
       <div class="tiles" id="status"></div>
       <div class="grid2">
@@ -126,7 +126,7 @@
             <h2>Remote</h2>
             <label class="switch-label"><input type="checkbox" id="remote-live" class="switch" checked> Live</label>
           </div>
-          <p class="muted small">Click the preview to tap the screen, scroll over it to scroll. Log in to a site once here; cookies are kept.</p>
+          <p class="muted small">Click to tap, scroll to scroll.</p>
           <div class="preview"><img id="shot" alt="Screen preview" hidden><span id="shot-msg" class="muted">No preview yet</span></div>
           <div class="field-row">
             <input id="remote-text" class="grow" placeholder="Type into the focused field" aria-label="Text to type" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other">
@@ -163,7 +163,7 @@
     <!-- Views -->
     <section data-panel="views" hidden>
       <div class="page-head">
-        <div><h1>Views</h1><p class="muted">Named web pages and camera streams. MQTT, the API and Home Assistant pick views by name. Switch a view off to skip it in every rotation; it can still be shown directly.</p></div>
+        <div><h1>Views</h1><p class="muted">Web pages and camera streams. Switched-off views are skipped in rotations.</p></div>
         <button id="view-add" class="btn primary"><svg class="ic"><use href="#i-plus"/></svg><span>Add view</span></button>
       </div>
       <div class="card flush">
@@ -177,14 +177,14 @@
         <div class="field-row">
           <label class="field grow"><span>Default view</span><select id="views-default"></select></label>
         </div>
-        <p class="muted small">Shown at boot and after a timed view ends, unless a rotation starts at boot.</p>
+        <p class="muted small">Shown at boot unless a rotation starts.</p>
       </div>
     </section>
 
     <!-- Rotations -->
     <section data-panel="rotations" hidden>
       <div class="page-head">
-        <div><h1>Rotations</h1><p class="muted">A rotation shows views in turn. Showing something for a set time pauses it, and it carries on afterwards; showing something with no time stops it until resumed.</p></div>
+        <div><h1>Rotations</h1><p class="muted">Views shown in turn. A timed view pauses the rotation; an untimed one stops it.</p></div>
         <button id="rotation-add" class="btn primary"><svg class="ic"><use href="#i-plus"/></svg><span>Add rotation</span></button>
       </div>
       <div id="rotations"></div>
@@ -204,7 +204,7 @@
 
     <!-- Sound & cast -->
     <section data-panel="sounds" hidden>
-      <div class="page-head"><div><h1>Sound &amp; cast</h1><p class="muted">Sounds, volume, and receiving media from phones and Home Assistant.</p></div></div>
+      <div class="page-head"><div><h1>Sound &amp; cast</h1><p class="muted">Sounds, volume and casting.</p></div></div>
       <div class="grid2">
         <div class="card">
           <div class="card-head"><h2>Playback</h2></div>
@@ -227,14 +227,12 @@
             <button type="button" id="yt-link" class="btn"><svg class="ic"><use href="#i-cast"/></svg><span>Link a phone with a TV code</span></button>
           </div>
           <div id="yt-code-box" class="code-box" hidden>
-            <div class="muted small">On the phone, open the YouTube app, tap the <strong>cast icon</strong>, then <strong>Link with TV code</strong>, and enter:</div>
+            <div class="muted small">YouTube app → cast icon → Link with TV code:</div>
             <div id="yt-code" class="code"></div>
-            <div class="muted small">The code is also on the kiosk's screen. Once linked, the kiosk appears under the cast button whenever YouTube is open on it; turn on <em>Keep YouTube ready</em> to make that always.</div>
+            
           </div>
           <label class="field"><span>Name shown to devices</span><input name="name" placeholder="Device name" maxlength="64"></label>
-          <p class="muted small"><strong>AirPlay:</strong> iPhones, iPads and Macs on the same network can mirror their screen or play video and music here (Control Center → Screen Mirroring).</p>
-          <p class="muted small"><strong>YouTube:</strong> the kiosk appears under the cast button in the YouTube app on Android and iPhone, like a smart TV. Videos play through YouTube's TV app, so that needs internet. It goes back to what was showing when you disconnect, or after 2 minutes with nothing playing.</p>
-          <p class="muted small"><strong>Other apps:</strong> Android phones and Home Assistant send media over DLNA: the kiosk shows up as a DLNA Digital Media Renderer. Google Cast (Chromecast) itself is limited to Google-certified devices.</p>
+          <p class="muted small">Android and Home Assistant can also send media over DLNA.</p>
           <div class="card-foot">
             <button type="button" id="cast-stop" class="btn" hidden><svg class="ic"><use href="#i-stop"/></svg><span>Stop casting</span></button>
             <button class="btn primary">Save</button>
@@ -254,7 +252,7 @@
 
     <!-- MQTT -->
     <section data-panel="mqtt" hidden>
-      <div class="page-head"><div><h1>MQTT</h1><p class="muted">Control the kiosk from Home Assistant or any MQTT client.</p></div></div>
+      <div class="page-head"><div><h1>MQTT</h1><p class="muted">Broker and Home Assistant discovery.</p></div></div>
       <form class="card" id="mqtt-form">
         <div class="card-head">
           <label class="switch-label strong"><input type="checkbox" name="enabled" class="switch"> Connect to a broker</label>
@@ -277,13 +275,13 @@
       </form>
       <div class="card">
         <div class="card-head"><h2>Home Assistant discovery</h2></div>
-        <p class="muted small">The kiosk publishes one retained device message, which Home Assistant 2024.12 or newer turns into a device with all its entities:</p>
+        <p class="muted small">Device discovery topic (Home Assistant 2024.12+):</p>
         <p><code id="mqtt-discovery-topic"></code></p>
         <div class="field-row wrap">
           <button id="mqtt-republish" class="btn"><svg class="ic"><use href="#i-refresh"/></svg><span>Republish now</span></button>
           <button id="mqtt-clear" class="btn danger ghost"><svg class="ic"><use href="#i-trash"/></svg><span>Clear retained messages</span></button>
         </div>
-        <p class="muted small">Clearing removes the device from Home Assistant and deletes the retained state, sound list and availability. They come back with Republish or the next reconnect.</p>
+        <p class="muted small">Clearing removes the device from Home Assistant until the next republish.</p>
       </div>
       <details class="card">
         <summary><h2>Topics</h2></summary>
@@ -296,7 +294,14 @@
       <div class="page-head"><div><h1>Network</h1><p class="muted">Interfaces, addressing and Wi-Fi.</p></div></div>
       <div id="net-list"></div>
       <div class="card">
-        <div class="card-head"><h2>Wi-Fi</h2><button id="wifi-scan" class="btn"><svg class="ic"><use href="#i-refresh"/></svg><span>Scan</span></button></div>
+        <div class="card-head">
+          <label class="switch-label strong"><input type="checkbox" id="wifi-radio" class="switch"> Wi-Fi</label>
+          <button id="wifi-scan" class="btn"><svg class="ic"><use href="#i-refresh"/></svg><span>Scan</span></button>
+        </div>
+        <p class="muted small" id="wifi-note"></p>
+        <h3 id="wifi-saved-head">Saved networks</h3>
+        <ul id="wifi-saved" class="list compact"></ul>
+        <h3>Nearby</h3>
         <ul id="wifi-list" class="list compact"></ul>
         <div class="field-row">
           <label class="field grow"><span>Network name</span><input id="wifi-ssid"></label>
@@ -308,7 +313,7 @@
 
     <!-- Display & sleep -->
     <section data-panel="display" hidden>
-      <div class="page-head"><div><h1>Display &amp; sleep</h1><p class="muted">Orientation, scaling and when the screen turns off.</p></div></div>
+      <div class="page-head"><div><h1>Display &amp; sleep</h1><p class="muted">Orientation, scale and screen sleep.</p></div></div>
       <div class="grid2">
         <form class="card" id="display-form">
           <div class="card-head"><h2>Display</h2></div>
@@ -333,7 +338,7 @@
             <label class="field"><span>Screen on at</span><input name="schedule_on" type="time"></label>
           </div>
           <div class="days" id="weekdays"></div>
-          <p class="muted small">No days picked means every day.</p>
+          
           <div class="card-foot"><button class="btn primary">Save</button></div>
         </form>
       </div>
@@ -341,7 +346,7 @@
 
     <!-- System -->
     <section data-panel="system" hidden>
-      <div class="page-head"><div><h1>System</h1><p class="muted">Device identity, updates and access.</p></div></div>
+      <div class="page-head"><div><h1>System</h1><p class="muted">Device, updates and access.</p></div></div>
       <div class="grid2">
         <div class="card">
           <div class="card-head"><h2>System</h2></div>
@@ -368,7 +373,7 @@
             <div class="days" id="upd-days"></div>
             <p class="muted small" id="upd-next"></p>
           </div>
-          <p class="muted small">The check runs twice a day and only looks for a newer release. With automatic updates on, the kiosk runs Update (system packages and a newer pikiosk) once a day inside the window; the display may restart. With both off, the kiosk contacts nothing on the internet.</p>
+          <p class="muted small">Checks twice a day. Automatic updates run Update once a day inside the window.</p>
           <div class="card-foot">
             <button id="sys-reboot" class="btn danger ghost"><svg class="ic"><use href="#i-power"/></svg><span>Reboot</span></button>
             <span class="spacer"></span>
@@ -380,33 +385,33 @@
         <form class="card" id="general-form">
           <div class="card-head"><h2>Device</h2></div>
           <label class="field"><span>Name</span><input name="device_name" required></label>
-          <label class="field"><span>ID</span><input name="device_id" required pattern="[a-z0-9_-]{1,48}"><small>Used in MQTT topics and Home Assistant entity IDs.</small></label>
+          <label class="field"><span>ID</span><input name="device_id" required pattern="[a-z0-9_-]{1,48}"><small>Used in MQTT topics and entity IDs.</small></label>
           <div class="card-foot"><button class="btn primary">Save</button></div>
         </form>
         <form class="card" id="oidc-form">
           <div class="card-head">
             <label class="switch-label strong"><input type="checkbox" name="enabled" class="switch"> Single sign-on (OIDC)</label>
           </div>
-          <p class="muted small">Sign in through Authentik, Keycloak or another OpenID Connect provider. The admin password keeps working.</p>
+          <p class="muted small">OpenID Connect. The admin password keeps working.</p>
           <label class="field"><span>Issuer URL</span><input name="issuer" type="url" placeholder="https://auth.example.com/application/o/pikiosk/"></label>
           <div class="grid-fields">
             <label class="field"><span>Client ID</span><input name="client_id" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore></label>
             <label class="field"><span>Client secret</span><input name="client_secret" type="password" autocomplete="new-password" placeholder="Empty for a public client" data-1p-ignore data-lpignore="true" data-bwignore></label>
           </div>
-          <label class="field"><span>Allowed groups</span><input name="allowed_groups" placeholder="Any user the provider allows"><small>Comma separated. Checked against the groups claim.</small></label>
+          <label class="field"><span>Allowed groups</span><input name="allowed_groups" placeholder="Any user the provider allows"><small>Comma separated.</small></label>
           <label class="field"><span>Button label</span><input name="button_label" placeholder="Sign in with SSO"></label>
           <label class="field"><span>Redirect URI to register</span>
             <span class="copy"><input name="redirect_url" placeholder=""><button type="button" class="btn icon" id="oidc-copy" title="Copy" aria-label="Copy redirect URI"><svg class="ic"><use href="#i-copy"/></svg></button></span>
-            <small>Leave empty to use the address in the browser's location bar.</small>
+            <small>Empty: the address in the browser.</small>
           </label>
           <div class="card-foot"><button class="btn primary">Save</button></div>
         </form>
         <div class="card" id="backup-card">
           <div class="card-head"><h2>Backup &amp; restore</h2></div>
-          <p class="muted small">One file with the settings, views, rotations and uploaded sounds. Restore it here after a reflash, or on another kiosk to copy its setup. Browser logins (cookies) are not included.</p>
+          <p class="muted small">Settings, views, rotations and uploaded sounds. Browser logins are not included.</p>
           <h3>Export</h3>
           <label class="switch-label"><input type="checkbox" id="backup-secrets" class="switch" checked> Include passwords and tokens</label>
-          <p class="muted small" id="backup-secrets-note">The file then holds the admin password hash, the API token and every view, MQTT and sign-in secret. Keep it somewhere safe.</p>
+          <p class="muted small" id="backup-secrets-note">Keep the file somewhere safe.</p>
           <div class="field-row"><a id="backup-download" class="btn primary" href="/api/backup"><svg class="ic"><use href="#i-copy"/></svg><span>Download backup</span></a></div>
           <h3>Restore</h3>
           <label class="btn"><svg class="ic"><use href="#i-plus"/></svg><span>Choose a backup file</span><input type="file" id="backup-file" accept=".json,application/json" hidden></label>
@@ -530,8 +535,8 @@
             <label class="field"><span>Password</span><input name="auth_password" type="password" autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore></label>
           </div>
           <label class="field" data-auth="token"><span>Token</span><input name="auth_token" type="password" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore></label>
-          <p class="muted small" data-auth="home_assistant">Create one in Home Assistant under your profile → Security → Long-lived access tokens.</p>
-          <p class="muted small">Credentials and headers are only sent to the view's own site. For other logins, use the Remote on the Control page once; cookies are kept.</p>
+          <p class="muted small" data-auth="home_assistant">Profile → Security → Long-lived access tokens.</p>
+          <p class="muted small">Sent only to the view's own site.</p>
         </fieldset>
         <fieldset>
           <legend>Request headers</legend>
@@ -545,11 +550,11 @@
             <label class="field"><span>Reload every (s)</span><input name="refresh_seconds" type="number" min="0" placeholder="0"><small>0 never reloads</small></label>
           </div>
           <label class="switch-label"><input type="checkbox" name="keep_loaded" class="switch"> Keep loaded in the background</label>
-          <p class="muted small">The page keeps running in a hidden tab after another view is shown, so switching back is instant and it stays up to date. Each kept page uses memory; keep it to a few. Rotations preload the next page on their own.</p>
+          <p class="muted small">Stays running in a hidden tab. Uses memory.</p>
           <label class="field"><span>Custom CSS</span><textarea name="css" rows="5" spellcheck="false" placeholder="header { display: none; }"></textarea></label>
         </fieldset>
       </div>
-      <p id="ve-stream" class="muted small">Put stream credentials in the URL, like rtsp://user:pass@camera/stream.</p>
+      <p id="ve-stream" class="muted small">Credentials go in the URL: rtsp://user:pass@camera/stream.</p>
       <p id="ve-error" class="error" role="alert"></p>
     </div>
     <div class="drawer-foot">

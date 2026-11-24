@@ -158,7 +158,10 @@ function selectTab(tab) {
   clearInterval(liveTimer);
   liveTimer = null;
   if (tab === "control") startLive();
-  if (tab === "network") loadNetwork();
+  if (tab === "network") {
+    refreshNetwork();
+    liveTimer = setInterval(() => !document.hidden && refreshNetwork(), 4000);
+  }
   if (tab === "system") loadSystem();
   if (tab === "sounds") loadSounds();
   window.scrollTo(0, 0);
@@ -269,9 +272,9 @@ async function refreshState() {
   const yt = s.youtube || {};
   let ytText = "";
   if (yt.enabled && yt.last_search) {
-    ytText = "YouTube: a phone at " + yt.search_from + " last looked for TVs " + new Date(yt.last_search).toLocaleString() + ".";
+    ytText = "Last phone search: " + yt.search_from + ", " + new Date(yt.last_search).toLocaleString() + ".";
   } else if (yt.enabled) {
-    ytText = "YouTube: no phone has looked for TVs here yet. Phones find the kiosk over SSDP, which stays inside one network: put the phone on the same Wi-Fi network or VLAN as the kiosk, or forward SSDP between them.";
+    ytText = "No phone has found the kiosk on this network. Use Link with TV code.";
   }
   $("#yt-discovery").textContent = ytText;
   cs.title = c.last_error || "";
@@ -361,7 +364,7 @@ $$("[data-key]").forEach((b) => b.addEventListener("click", () =>
 $$("[data-scroll]").forEach((b) => b.addEventListener("click", () =>
   act(() => api("POST", "/api/input", { type: "scroll", x: 0.5, y: 0.5, dy: Number(b.dataset.scroll) })).then(() => setTimeout(shot, 300))));
 $("#clear-browser").addEventListener("click", () => {
-  if (confirm("Log out of every site and delete all cookies and site data on the kiosk?"))
+  if (confirm("Clear all cookies and site data?"))
     act(() => api("POST", "/api/browser/clear"), "Browser data cleared");
 });
 
@@ -756,7 +759,7 @@ $("#yt-link").addEventListener("click", async () => {
   } catch (e) {
     $("#yt-code").textContent = "";
     $("#yt-code-box").hidden = true;
-    toast(e.message + ". YouTube is open on the kiosk: use the Remote's arrow keys to go to Settings → Link with TV code.", true);
+    toast(e.message + ". Use the Remote's arrow keys: Settings → Link with TV code.", true);
   } finally {
     b.disabled = false;
     refreshState();
@@ -782,7 +785,7 @@ $("#mqtt-republish").addEventListener("click", async () => {
   if (r) toast("Published to " + r.topic);
 });
 $("#mqtt-clear").addEventListener("click", async () => {
-  if (!confirm("Delete this kiosk's retained MQTT messages? Home Assistant removes the device until it is published again.")) return;
+  if (!confirm("Clear retained messages?")) return;
   const r = await act(() => api("POST", "/api/mqtt/clear"));
   if (r) toast(`Cleared ${r.topics.length} retained topics`);
 });
@@ -874,13 +877,62 @@ function netCard(it) {
       gateway: form.gateway.value.trim(),
       dns: form.dns.value.split(",").map((s) => s.trim()).filter(Boolean),
     };
-    if (!confirm(`Apply to ${it.connection}? If the address changes, reconnect at the new address.`)) return;
+    if (!confirm(`Apply to ${it.connection}?`)) return;
     await act(() => api("POST", "/api/network/ipv4", body), "Applying network settings");
     setTimeout(loadNetwork, 5000);
   });
   card.append(form);
   return card;
 }
+
+// Skips while a field on the page is being edited, so typing is not lost.
+function refreshNetwork() {
+  const a = document.activeElement;
+  const typing = a && a.closest('[data-panel="network"]') &&
+    (a.tagName === "SELECT" || a.tagName === "TEXTAREA" || (a.tagName === "INPUT" && a.type !== "checkbox"));
+  if (typing) return;
+  loadNetwork();
+  loadWiFi();
+}
+
+async function loadWiFi() {
+  let st;
+  try {
+    st = await api("GET", "/api/network/wifi");
+  } catch {
+    return;
+  }
+  $("#wifi-radio").checked = st.radio;
+  $("#wifi-scan").disabled = false;
+  $("#wifi-note").textContent = "";
+  $("#wifi-saved-head").hidden = !st.saved.length;
+  $("#wifi-saved").replaceChildren(...st.saved.map((n) => {
+    const li = el("li");
+    li.append(el("span", n.name, "name"));
+    if (n.active) li.append(chip("connected" + (n.device ? " on " + n.device : ""), "accent"));
+    const b = el("button", null, "btn sm danger ghost");
+    b.append(icon("trash"), el("span", "Forget"));
+    b.addEventListener("click", async () => {
+      if (!confirm(`Forget ${n.name}?`)) return;
+      await act(() => api("POST", "/api/network/wifi/forget", { name: n.name }), "Forgot " + n.name);
+      loadWiFi();
+      refreshNetwork();
+    });
+    li.append(b);
+    return li;
+  }));
+}
+
+$("#wifi-radio").addEventListener("change", async (e) => {
+  const on = e.target.checked;
+  if (!on && !confirm("Turn off Wi-Fi?")) {
+    e.target.checked = true;
+    return;
+  }
+  await act(() => api("POST", "/api/network/wifi/radio", { on }), on ? "Wi-Fi on" : "Wi-Fi off");
+  loadWiFi();
+  refreshNetwork();
+});
 
 $("#wifi-scan").addEventListener("click", async () => {
   const list = $("#wifi-list");
@@ -1014,7 +1066,7 @@ function nextWindow(s) {
     const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i, fh, fm);
     if ((days.length === 0 || days.includes(d.getDay())) && d > now) {
       const when = d.toLocaleString(undefined, { weekday: "long", hour: "2-digit", minute: "2-digit" });
-      return "Next window opens " + when + ". No days picked means every day.";
+      return "Next: " + when + ".";
     }
   }
   return "";
@@ -1099,8 +1151,8 @@ let pendingBackup = null;
 $("#backup-secrets").addEventListener("change", (e) => {
   $("#backup-download").href = "/api/backup" + (e.target.checked ? "" : "?secrets=0");
   $("#backup-secrets-note").textContent = e.target.checked
-    ? "The file then holds the admin password hash, the API token and every view, MQTT and sign-in secret. Keep it somewhere safe."
-    : "Secrets are left out. Restoring keeps the secrets the kiosk already has.";
+    ? "Keep the file somewhere safe."
+    : "Secrets left out; a restore keeps the current ones.";
 });
 
 $("#backup-file").addEventListener("change", async (e) => {
@@ -1136,10 +1188,7 @@ $("#backup-file").addEventListener("change", async (e) => {
     l.append(cb, " " + label);
     return l;
   }));
-  $("#backup-hint").textContent = (sameDevice
-    ? "This backup is from this kiosk, so everything in it is selected."
-    : "This backup is from another kiosk: its name, ID and login are left out unless you pick them.")
-    + (b.secrets ? "" : " It was made without passwords and tokens: the kiosk keeps its own.");
+  $("#backup-hint").textContent = sameDevice ? "" : "From another kiosk: name, ID and login not selected.";
   $("#backup-preview").hidden = false;
 });
 
@@ -1147,7 +1196,7 @@ $("#backup-restore").addEventListener("click", async () => {
   if (!pendingBackup) return;
   const sections = $$("#backup-sections input:checked").map((c) => c.value);
   if (!sections.length) return toast("Pick at least one part", true);
-  if (!confirm("Replace these settings with the backup's? " + sections.map((s) => SECTION_LABELS[s]).join(", "))) return;
+  if (!confirm("Restore " + sections.length + " parts?")) return;
   const r = await act(() => api("POST", "/api/backup/restore", { backup: pendingBackup, sections }));
   if (!r) return;
   toast(`Restored${r.sounds ? ", " + r.sounds + " sounds" : ""}`);
@@ -1185,15 +1234,15 @@ $("#token-show").addEventListener("click", (e) => {
   e.target.textContent = shown ? "Show" : "Hide";
 });
 $("#token-new").addEventListener("click", async () => {
-  if (!confirm("Regenerate the API token? Anything using the old one stops working.")) return;
+  if (!confirm("Regenerate the API token?")) return;
   const r = await act(() => api("POST", "/api/token"), "Token regenerated");
   if (r) { $("#api-token").value = r.api_token; $("#api-token").dataset.token = r.api_token; $("#token-show").textContent = "Hide"; }
 });
 $("#sys-reboot").addEventListener("click", () => confirm("Reboot the kiosk?") && act(() => api("POST", "/api/system/reboot"), "Rebooting"));
 $("#sys-rollback").addEventListener("click", () =>
-  confirm("Switch back to the previous system version?") && act(() => api("POST", "/api/system/rollback"), "Rolling back"));
+  confirm("Roll back?") && act(() => api("POST", "/api/system/rollback"), "Rolling back"));
 $("#sys-update").addEventListener("click", async () => {
-  if (!confirm("Download and apply the latest system and pikiosk version? The kiosk may restart its display.")) return;
+  if (!confirm("Update now?")) return;
   await act(() => api("POST", "/api/system/update"), "Update started");
   pollUpdate();
 });

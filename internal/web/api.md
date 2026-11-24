@@ -139,6 +139,9 @@ A view:
 | `GET /api/network` | | Interfaces, addresses and connections. |
 | `POST /api/network/wifi/scan` | | Scan for Wi-Fi networks. |
 | `POST /api/network/wifi/connect` | `{"ssid", "password"}` | Join a Wi-Fi network. |
+| `GET /api/network/wifi` | | `{"radio": true, "saved": [{"name", "active", "device"}]}`: whether Wi-Fi is on, and the saved Wi-Fi networks. |
+| `POST /api/network/wifi/radio` | `{"on": false}` | Turn Wi-Fi off (it stays off after reboots) or on. Ethernet is not affected. |
+| `POST /api/network/wifi/forget` | `{"name": "MyNetwork"}` | Delete a saved Wi-Fi network; only Wi-Fi connections can be removed. |
 | `POST /api/network/ipv4` | `{"connection", "method": "auto" or "manual", "address": "10.0.0.5/24", "gateway", "dns": []}` | Change addressing. The response is sent before the change applies. |
 | `GET /api/system` | | Version, uptime, OS, hardware. |
 | `POST /api/system/timezone` | `{"timezone": "America/Chicago"}` | Set the timezone. |

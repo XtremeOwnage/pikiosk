@@ -115,6 +115,64 @@ type WiFiNetwork struct {
 	Active   bool   `json:"active"`
 }
 
+// WiFiStatus is the Wi-Fi radio and the saved Wi-Fi networks.
+type WiFiStatus struct {
+	Radio bool        `json:"radio"`
+	Saved []SavedWiFi `json:"saved"`
+}
+
+type SavedWiFi struct {
+	Name   string `json:"name"`
+	Active bool   `json:"active"`
+	Device string `json:"device,omitempty"`
+}
+
+func GetWiFi(ctx context.Context) (WiFiStatus, error) {
+	st := WiFiStatus{Saved: []SavedWiFi{}}
+	out, err := run(ctx, 10*time.Second, "nmcli", "radio", "wifi")
+	if err != nil {
+		return st, err
+	}
+	st.Radio = strings.TrimSpace(out) == "enabled"
+	rows, err := nmcli(ctx, "-f", "NAME,TYPE,ACTIVE,DEVICE", "connection", "show")
+	if err != nil {
+		return st, err
+	}
+	for _, r := range rows {
+		if len(r) < 4 || r[1] != "802-11-wireless" {
+			continue
+		}
+		st.Saved = append(st.Saved, SavedWiFi{Name: r[0], Active: r[2] == "yes", Device: r[3]})
+	}
+	return st, nil
+}
+
+// SetWiFiRadio turns Wi-Fi on or off. Off disconnects and stays off across
+// reboots; saved networks are kept.
+func SetWiFiRadio(ctx context.Context, on bool) error {
+	state := "off"
+	if on {
+		state = "on"
+	}
+	_, err := run(ctx, 15*time.Second, "nmcli", "radio", "wifi", state)
+	return err
+}
+
+// ForgetWiFi deletes a saved Wi-Fi network, disconnecting from it.
+func ForgetWiFi(ctx context.Context, name string) error {
+	st, err := GetWiFi(ctx)
+	if err != nil {
+		return err
+	}
+	for _, s := range st.Saved {
+		if s.Name == name {
+			_, err := run(ctx, 15*time.Second, "nmcli", "connection", "delete", "id", name)
+			return err
+		}
+	}
+	return errors.New("no saved Wi-Fi network named " + name)
+}
+
 // wifiOn turns the Wi-Fi radio on; Raspberry Pi OS ships with it off.
 func wifiOn(ctx context.Context) {
 	out, err := run(ctx, 10*time.Second, "nmcli", "radio", "wifi")
