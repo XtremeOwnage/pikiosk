@@ -10,6 +10,10 @@ Applies to code comments, UI text, docs, commit messages, PR bodies and release 
 - Docs: reference style, tables and short lists over paragraphs.
 - Commits and PRs: a terse subject, then a few short bullets of what changed.
 
+## Git
+
+- `main` only takes pull requests (ruleset "main: pull requests only"). Work on a branch, push it, open a PR.
+
 ## Checks
 
 - `go vet ./...` and `go test ./...`
